@@ -1,5 +1,11 @@
 # Vận hành Homepage — cửa vào hiện hành
 
+## Dọn file trùng — 01/11/2026
+
+Mục nhỏ trên Homepage mở `/don-file-trung/` ở tab mới. Bản đầu chỉ phân tích một
+inventory JSON của từng cloud trên thiết bị, không tải dữ liệu lên server hay xóa file.
+Quét NAS trực tiếp chưa kết nối. Xem [phạm vi và giới hạn](DUPLICATES.md).
+
 ## NAS Terminal — candidate 01/11/2026
 
 [Thiết kế, triển khai và nghiệm thu](NAS-TERMINAL.md): PTY/tmux tối đa 3 phiên, relay WebSocket outbound riêng; mặc định tắt. Chưa triển khai relay/agent NAS và chưa có số đo runtime. Không thay report publisher hoặc dữ liệu hiện hành.

@@ -1,0 +1,25 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {JSDOM} from 'jsdom';
+import {findDuplicates} from '../public/duplicate-core.js';
+test('inventory displays as text; switching cloud clears all old results', async () => {
+  const dom = new JSDOM(readFileSync(new URL('../public/don-file-trung/index.html', import.meta.url), 'utf8'), {runScripts:'outside-only'});
+  const w = dom.window, d = w.document;
+  w.findDuplicates = findDuplicates;
+  w.eval(readFileSync(new URL('../public/duplicates.js', import.meta.url), 'utf8').replace(/^import .*;\n/, ''));
+  const inventory = [{Path:'<img src=x onerror=alert(1)>',Size:10,Hashes:{MD5:'a'.repeat(32)}},{Path:'copy',Size:10,Hashes:{MD5:'a'.repeat(32)}}];
+  Object.defineProperty(d.getElementById('duplicate-inventory'), 'files', {configurable:true,value:[{name:'drive.json',size:100,text:async()=>JSON.stringify(inventory)}]});
+  d.getElementById('duplicate-form').dispatchEvent(new w.Event('submit', {cancelable:true}));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(d.getElementById('duplicate-results').hidden,false);
+  const details = d.querySelector('.duplicate-group'); details.open = true;
+  details.dispatchEvent(new w.Event('toggle'));
+  assert.match(details.textContent, /<img/); assert.equal(details.querySelector('img'),null);
+  assert.equal(d.querySelectorAll('button').length,2);
+  d.getElementById('duplicate-cloud').value='koofr';
+  d.getElementById('duplicate-cloud').dispatchEvent(new w.Event('change'));
+  assert.equal(d.getElementById('duplicate-results').hidden,true);
+  assert.equal(d.getElementById('duplicate-groups').children.length,0);
+  w.close();
+});

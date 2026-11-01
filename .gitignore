@@ -8,3 +8,7 @@ __pycache__/
 # Local preview identity; not a separate hosted Site
 .openai/
 terminal-relay/.wrangler/
+
+# Private duplicate inventories
+audit/
+*-inventory.json
