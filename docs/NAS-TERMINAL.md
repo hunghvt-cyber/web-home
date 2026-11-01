@@ -1,5 +1,14 @@
 # NAS Terminal — 01/11/2026
 
+## Hoạt động — nghiệm thu NAS lúc 20:03 ngày 01/11/2026
+
+Nguyên nhân HTTP 401 đã được xác nhận: GitHub clipboard keys có edge whitespace (44 thay vì 43 ký tự). Sau chuẩn hóa đầu/cuối ở workflow deploy và signer Vercel, [run 41309115094](https://github.com/hunghvt-cyber/web-home/actions/runs/41309115094) xác nhận ticket auth, NAS online và list 0 phiên đều PASS. Không yêu cầu chủ NAS tạo/dán lại khóa.
+
+Nghiệm thu [run 41309413460](https://github.com/hunghvt-cyber/web-home/actions/runs/41309413460), job 124856465702: BROWSER_TICKET_AUTH, NAS_AGENT ONLINE, READONLY_SESSION_LIST, NAS_PTY_INPUT_OUTPUT và TEMPORARY_SESSION_CLOSED đều PASS. Chỉ tạo một session ngẫu nhiên của bài test, dùng printf challenge không chứa secret, rồi kết thúc đúng session đó; không sửa các session khác hay camera/backup. Không lưu payload shell trong log.
+
+NAS_TERMINAL_ENABLED đã đặt true ở Production sau bài test. Trang sử dụng là https://homepage-nas.vercel.app/nas/terminal/. Commit chứa mục này gỡ workflow qualification tạm, giữ workflow relay chạy manual; Git integration triển khai với cấu hình mới. Phải kiểm tra deployment READY và alias đúng commit riêng; không suy từ flag env. Chưa có người dùng đăng nhập/thao tác UI thật trên điện thoại hoặc số đo RAM/CPU NAS; các test PTY runtime nói trên được thực hiện qua relay với runner. Giới hạn thu hồi ticket 5 phút và session không sống qua reboot vẫn áp dụng.
+
+
 ## Kết nối sau khi cài agent — 19:40 ngày 01/11/2026
 
 Chủ NAS cung cấp KEY_PREPARE=PASS, pip websockets 15.0.1 aarch64 thành công và user service active. Đây chưa phải bằng chứng agent online. GitHub deploy retry job 124850203977 PASS, đã tạo Worker secrets TICKET_KEY và AGENT_KEY. Vercel metadata xác nhận NAS_TERMINAL_TICKET_KEY kiểu sensitive, chỉ Production; NAS_TERMINAL_ENABLED vẫn false.
