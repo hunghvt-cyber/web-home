@@ -25,6 +25,8 @@ test('audit commands reject arbitrary remotes, traversal and mutation operations
   assert.throws(()=>command({...start,action:'delete'}));
   assert.throws(()=>command({...start,cloud:'shell'}));
   assert.equal(command({...start,path:'Ảnh gia đình'}).path,'Ảnh gia đình');
+  assert.equal(command({op:'audit',id,seq:2,action:'browse',cloud:'gdrive',location:id}).location,id);
+  assert.throws(()=>command({op:'audit',id,seq:2,action:'browse',cloud:'gdrive',location:'raw-provider-ID'}));
 });
 test('duplicates API requires owner and origin, mints only the scan audience',async()=>{
   process.env.PORTAL_BASE_URL='https://homepage.example';let grants=0;

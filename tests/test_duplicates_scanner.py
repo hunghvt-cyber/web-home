@@ -23,11 +23,11 @@ class ScannerTests(unittest.TestCase):
             {'Name':'same.jpg','Size':10,'ID':'2','Hashes':{'MD5':'a'*32}},
             {'Name':'same.jpg','Size':10,'ID':'3','Hashes':{'MD5':'a'*32}},
             {'Name':'native','Size':-1,'MimeType':'application/vnd.google-apps.document'},
-            {'Name':'child','IsDir':True}],
-            'drive:child':[{'Name':'other','Size':5,'ID':'4','Hashes':{'MD5':'b'*32}}],
+            {'Name':'child','IsDir':True,'ID':'child-id'}],
+            'drive:@child-id':[{'Name':'other','Size':5,'ID':'4','Hashes':{'MD5':'b'*32}}],
             'koofr:':[{'Name':'separate','Size':10,'Hashes':{'MD5':'a'*32}}]}))
         self.fake = self.root / 'rclone'
-        self.fake.write_text('#!'+sys.executable+'\nimport json,sys,time\nfrom pathlib import Path\np=Path('+repr(str(self.fixture))+')\nif p.with_suffix(".slow").exists():\n print("[",flush=True);time.sleep(30)\nprint(json.dumps(json.loads(p.read_text())[sys.argv[2]]))\n')
+        self.fake.write_text('#!'+sys.executable+'\nimport json,sys,time\nfrom pathlib import Path\np=Path('+repr(str(self.fixture))+')\nif p.with_suffix(".slow").exists():\n print("[",flush=True);time.sleep(30)\ntarget=sys.argv[2]\nif "--drive-root-folder-id" in sys.argv:target+="@"+sys.argv[sys.argv.index("--drive-root-folder-id")+1]\nprint(json.dumps(json.loads(p.read_text())[target]))\n')
         self.fake.chmod(0o700)
         self.roots = {'gdrive':{'remote':'drive','path':''},'koofr':{'remote':'koofr','path':''}}
         self.scanner = Scanner(self.root/'state', self.roots, str(self.fake))
@@ -101,6 +101,56 @@ class ScannerTests(unittest.TestCase):
         self.scanner.shutdown()
         self.assertIsNotNone(process.poll())
         self.assertEqual(self.scanner.handle({'action':'status'})['scan']['state'],'interrupted')
+
+    def test_picker_uses_drive_ids_for_same_named_folders_and_never_crosses_cloud(self):
+        self.fixture.write_text(json.dumps({'drive:':[
+            {'Name':'Duplicate','ID':'one','IsDir':True},
+            {'Name':'Duplicate','ID':'two','IsDir':True}],
+            'drive:@one':[{'Name':'a','ID':'f1','Size':10,'Hashes':{'MD5':'a'*32}}],
+            'drive:@two':[{'Name':'a','ID':'f2','Size':10,'Hashes':{'MD5':'a'*32}}]}))
+        page=self.scanner.handle({'action':'browse','cloud':'gdrive'})
+        self.assertEqual(len(page['folders']),2)
+        self.assertEqual(page['folders'][1]['duplicateIndex'],2)
+        first,second=[f['location'] for f in page['folders']]
+        self.assertNotEqual(first,second)
+        child=self.scanner.handle({'action':'browse','cloud':'gdrive','location':second})
+        self.assertEqual(child['parent'],page['location'])
+        with self.assertRaises(ValueError):self.scanner.handle({'action':'browse','cloud':'koofr','location':second})
+        self.scanner.handle({'action':'start','cloud':'gdrive','location':second,'id':'6'*32})
+        self.scanner.thread.join(5)
+        scan=self.scanner.handle({'action':'status'})['scan']
+        self.assertEqual((scan['state'],scan['files'],scan['path']),('complete',1,'Duplicate'))
+        root=self.start('7'*32)
+        self.assertEqual((root['state'],root['files']),('complete',2))
+        self.assertEqual(self.scanner.handle({'action':'groups','scanId':root['id']})['groups'][0]['copies'],2)
+
+    def test_picker_paginates_and_rejects_forged_handles(self):
+        self.fixture.write_text(json.dumps({'koofr:':[{'Name':str(i),'IsDir':True} for i in range(7)]}))
+        page=self.scanner.handle({'action':'browse','cloud':'koofr'})
+        self.assertEqual(len(page['folders']),5)
+        second=self.scanner.handle({'action':'browse','cloud':'koofr','location':page['location'],'listing':page['listing'],'offset':page['nextOffset']})
+        self.assertEqual(len(second['folders']),2)
+        self.assertIsNone(second['nextOffset'])
+        with self.assertRaises(ValueError):self.scanner.handle({'action':'browse','cloud':'gdrive','location':'f'*32})
+
+    def test_legacy_checkpoint_migration_preserves_data_and_backups(self):
+        state=self.root/'legacy';state.mkdir()
+        import sqlite3
+        db=sqlite3.connect(state/'inventory.sqlite3')
+        db.executescript('''CREATE TABLE scans(id TEXT PRIMARY KEY,cloud TEXT,root TEXT,state TEXT,created REAL,updated REAL,backend TEXT,skipped INTEGER DEFAULT 0,error TEXT);
+          CREATE TABLE queue(scan TEXT,folder TEXT,state TEXT,PRIMARY KEY(scan,folder));
+          CREATE TABLE files(scan TEXT,identity TEXT,folder TEXT,path TEXT,size INTEGER,hash TEXT,PRIMARY KEY(scan,identity));''')
+        ident='8'*32
+        db.execute('INSERT INTO scans(id,cloud,root,state,created,updated,backend) VALUES(?,?,?,?,?,?,?)',(ident,'gdrive','','paused',1,1,json.dumps(self.roots['gdrive'],sort_keys=True)))
+        db.execute('INSERT INTO queue VALUES(?,?,?)',(ident,'','pending'))
+        db.execute('INSERT INTO files VALUES(?,?,?,?,?,?)',(ident,'id:old','','old',5,'5:MD5:'+'b'*32))
+        db.commit();db.close()
+        scanner=Scanner(state,self.roots,str(self.fake))
+        self.assertEqual(scanner.handle({'action':'status'})['scan']['files'],1)
+        backup=sqlite3.connect(state/'inventory.before-folder-picker.sqlite3')
+        self.assertEqual(len(backup.execute('PRAGMA table_info(queue)').fetchall()),3);backup.close()
+        scanner.handle({'action':'resume','scanId':ident});scanner.thread.join(5)
+        self.assertEqual(scanner.handle({'action':'status'})['scan']['state'],'complete')
 
 
 if __name__=='__main__':unittest.main()

@@ -35,7 +35,7 @@ UI disables them. No new credentials are requested or stored by this installer.
 It creates owner-only `~/.config/homepage-duplicates/config.json` with provider allowlist,
 absolute rclone binary and HDD state directory `/vol1/homepage-duplicates-<uid>`.
 It preserves terminal credentials and the first previous `agent.py.before-duplicates`,
-copies the agent/scanner, restarts only `homepage-terminal.service` (tmux shells survive).
+copies the agent/scanner (version 2 for folder selection), restarts only `homepage-terminal.service` (tmux shells survive).
 No scan is started by installation. `/vol1` is checked before SQLite connections, avoiding
 new root-disk state when the HDD is unavailable. Invalid scanner config disables only the
 scanner; terminal remains available.
@@ -58,9 +58,22 @@ partial records. Completed directories are retained. Resume rejects changed remo
 allowlist; do not change underlying remote accounts during a scan. Failed/incomplete
 listings cannot be marked complete. Provider errors are sanitized; no file payload logs.
 
-Drive folders with identical names are currently rejected as ambiguous rather than
-silently skipped: traversal by folder ID is a future addition. Metadata paths over 1024
-characters and records over 2 MiB fail explicitly. This version does not claim a point-in-
+Folder picker v2 browses read-only metadata, offers parent/root navigation and a
+“Quét thư mục này” action; no manual path is needed. NAS-issued opaque location handles
+are bound to provider and configured backend. Browser input cannot supply arbitrary
+Drive IDs or remotes. Drive traversal uses returned provider folder IDs, including
+same-named sibling folders; names remain display-only. Koofr uses provider-relative paths.
+Folder lists are capped at 5,000 per directory and paginated at five per response, with
+a 15-second listing ceiling and explicit retry on incomplete results. Pagination binds
+an immutable local listing generation; a refreshed generation invalidates old pages.
+
+Existing queue checkpoints are migrated additively with display_path/provider_id fields;
+a private SQLite snapshot is saved before migrating an existing database. Existing
+scans and file records are retained. Legacy queued paths remain readable; new Drive child
+nodes are keyed by ID, so resuming one duplicate-name node cannot delete another node's
+local inventory. Migration affects local metadata only, never provider files.
+
+Metadata paths over 1024 characters and records over 2 MiB fail explicitly. This version does not claim a point-in-
 time provider snapshot; a future cleanup must independently revalidate every selection.
 
 Only completed scans expose groups (20/page); member paths are fetched on expansion
