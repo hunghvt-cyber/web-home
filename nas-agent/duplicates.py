@@ -17,6 +17,16 @@ from cloud_cleanup import CleanupMixin, protected
 ID = re.compile(r'^[a-f0-9]{32}$')
 
 
+def drive_folder_id(value):
+    """Rclone directory shortcuts use target ID + TAB + shortcut ID."""
+    if not isinstance(value, str) or not value:
+        raise ValueError('Thiếu ID thư mục Drive. Chưa xác nhận quét đủ.')
+    parts = value.split('\t')
+    if len(parts) not in (1, 2) or any(not re.fullmatch(r'[a-zA-Z0-9_-]{1,256}', part) for part in parts):
+        raise ValueError('ID thư mục Drive sai định dạng. Chưa xác nhận quét đủ.')
+    return parts[0], len(parts) == 2
+
+
 def scope(value):
     if not isinstance(value, str) or len(value) > 1024 or re.search(r'[\x00-\x1f:]', value):
         raise ValueError('Thư mục không hợp lệ.')
@@ -119,6 +129,17 @@ class Scanner(CleanupMixin):
                 db.execute('ALTER TABLE queue ADD COLUMN provider_id TEXT')
                 db.execute('UPDATE queue SET display_path=folder')
             self.setup_cleanup(db)
+            # Shortcut descendants are scan-only: never mutate through a folder alias.
+            backup = self.directory / 'inventory.before-shortcuts.sqlite3'
+            if existing_database and 'read_only' not in {r['name'] for r in db.execute('PRAGMA table_info(queue)')} and not backup.exists():
+                db.commit()
+                fd = os.open(backup, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600); os.close(fd)
+                target = sqlite3.connect(backup)
+                try: db.backup(target)
+                finally: target.close()
+            for table in ('queue', 'locations'):
+                if 'read_only' not in {r['name'] for r in db.execute('PRAGMA table_info('+table+')')}:
+                    db.execute('ALTER TABLE '+table+' ADD COLUMN read_only INTEGER NOT NULL DEFAULT 0')
             db.execute("UPDATE scans SET state='interrupted',updated=? WHERE state IN ('running','pausing')", (time.time(),))
             db.execute("UPDATE queue SET state='pending' WHERE state='working'")
         self.db.chmod(0o600)
@@ -168,7 +189,7 @@ class Scanner(CleanupMixin):
                 db.execute('INSERT INTO scans(id,cloud,root,state,created,updated,backend) VALUES(?,?,?,?,?,?,?)', (ident, cloud, path, 'running', now, now, json.dumps(self.roots[cloud],sort_keys=True)))
                 provider_id = location['provider_id'] if location else None
                 node = 'id:' + provider_id if provider_id else path
-                db.execute('INSERT INTO queue(scan,folder,state,display_path,provider_id) VALUES(?,?,?,?,?)', (ident, node, 'pending', path, provider_id))
+                db.execute('INSERT INTO queue(scan,folder,state,display_path,provider_id,read_only) VALUES(?,?,?,?,?,?)', (ident, node, 'pending', path, provider_id, location['read_only'] if location else 0))
                 db.commit()
                 self.launch(ident)
                 return self.status(db, ident)
@@ -204,12 +225,12 @@ class Scanner(CleanupMixin):
             if action == 'files':
                 key = command.get('group')
                 if not isinstance(key, str) or len(key) > 100: raise ValueError('Nhóm không hợp lệ.')
-                rows = db.execute('SELECT identity,path,handle FROM files WHERE scan=? AND hash=? AND removed=0 ORDER BY path,identity LIMIT 6 OFFSET ?', (ident, key, offset)).fetchall()
+                rows = db.execute('SELECT f.identity,f.path,f.handle,q.read_only FROM files f JOIN queue q ON q.scan=f.scan AND q.folder=f.folder WHERE f.scan=? AND f.hash=? AND f.removed=0 ORDER BY f.path,f.identity LIMIT 6 OFFSET ?', (ident, key, offset)).fetchall()
                 result=[]
                 for row in rows[:5]:
                     handle=row['handle'] or uuid.uuid4().hex
                     if not row['handle']:db.execute('UPDATE files SET handle=? WHERE scan=? AND identity=?',(handle,ident,row['identity']))
-                    result.append({'path':row['path'],'fileKey':handle,'cleanable':not protected(row['path'])})
+                    result.append({'path':row['path'],'fileKey':handle,'cleanable':not row['read_only'] and not protected(row['path'])})
                 return {'files': result, 'nextOffset': offset + 5 if len(rows) > 5 else None}
             raise ValueError('Thao tác không hỗ trợ.')
 
@@ -244,7 +265,7 @@ class Scanner(CleanupMixin):
             if not handle:
                 row = db.execute('SELECT handle FROM locations WHERE cloud=? AND parent IS NULL AND backend=?', (cloud, backend)).fetchone()
                 handle = row['handle'] if row else uuid.uuid4().hex
-                if not row: db.execute('INSERT INTO locations VALUES(?,?,?,?,?,?)', (handle, cloud, None, '', None, backend))
+                if not row: db.execute('INSERT INTO locations(handle,cloud,parent,path,provider_id,backend) VALUES(?,?,?,?,?,?)', (handle, cloud, None, '', None, backend))
             current = dict(self.location(db, cloud, handle))
         if offset == 0:
             # Metadata only, no scanner lock held during provider I/O. Fail closed on incomplete lists.
@@ -260,10 +281,8 @@ class Scanner(CleanupMixin):
                         raise ValueError('Metadata thư mục không hợp lệ.')
                     path = current['path'] + '/' + name if current['path'] else name
                     if len(path) > 1024: raise ValueError('Đường dẫn quá dài.')
-                    provider_id = item.get('ID') if cloud == 'gdrive' else None
-                    if cloud == 'gdrive' and (not isinstance(provider_id, str) or not re.fullmatch(r'[a-zA-Z0-9_-]{1,256}', provider_id)):
-                        raise ValueError('Thiếu ID thư mục Drive; chưa thể chọn an toàn.')
-                    folders.append((name, path, provider_id))
+                    provider_id, shortcut = drive_folder_id(item.get('ID')) if cloud == 'gdrive' else (None, False)
+                    folders.append((name, path, provider_id, bool(current['read_only'] or shortcut)))
                     if len(folders) > 5000: raise ValueError('Thư mục vượt 5.000 thư mục con; cần thu hẹp phạm vi.')
                 if process.wait(timeout=2): raise ValueError('Không tải đủ thư mục. Kiểm tra mạng/quyền truy cập rồi thử lại.')
             except Exception:
@@ -275,10 +294,11 @@ class Scanner(CleanupMixin):
             listing = uuid.uuid4().hex
             with self.guard, self.connection() as db:
                 db.execute('DELETE FROM folder_pages WHERE parent=?', (handle,))
-                for index, (name, path, provider_id) in enumerate(sorted(folders, key=lambda f:(f[0].casefold(), f[2] or ''))):
+                for index, (name, path, provider_id, read_only) in enumerate(sorted(folders, key=lambda f:(f[0].casefold(), f[2] or ''))):
                     previous = db.execute('SELECT handle FROM locations WHERE parent=? AND cloud=? AND backend=? AND path=? AND provider_id IS ?', (handle, cloud, backend, path, provider_id)).fetchone()
                     child = previous['handle'] if previous else uuid.uuid4().hex
-                    if not previous: db.execute('INSERT INTO locations VALUES(?,?,?,?,?,?)', (child, cloud, handle, path, provider_id, backend))
+                    if not previous: db.execute('INSERT INTO locations(handle,cloud,parent,path,provider_id,backend,read_only) VALUES(?,?,?,?,?,?,?)', (child, cloud, handle, path, provider_id, backend, read_only))
+                    elif read_only: db.execute('UPDATE locations SET read_only=1 WHERE handle=?', (child,))
                     db.execute('INSERT INTO folder_pages VALUES(?,?,?,?)', (handle, listing, index, child))
         else:
             listing = command.get('listing')
@@ -331,9 +351,10 @@ class Scanner(CleanupMixin):
                     scan = self._scan(db, ident)
                     if scan['state'] != 'running':
                         db.execute("UPDATE scans SET state='paused',updated=? WHERE id=? AND state='pausing'", (time.time(), ident)); return
-                    folder = db.execute("SELECT folder,display_path,provider_id FROM queue WHERE scan=? AND state='pending' ORDER BY folder LIMIT 1", (ident,)).fetchone()
+                    folder = db.execute("SELECT folder,display_path,provider_id,read_only FROM queue WHERE scan=? AND state='pending' ORDER BY folder LIMIT 1", (ident,)).fetchone()
                     if not folder:
                         db.execute("UPDATE scans SET state='complete',updated=? WHERE id=?", (time.time(), ident)); return
+                    read_only = folder['read_only']
                     node, folder, provider_id = folder['folder'], folder['display_path'], folder['provider_id']
                     db.execute("UPDATE queue SET state='working' WHERE scan=? AND folder=?", (ident, node))
                     db.execute('DELETE FROM files WHERE scan=? AND folder=?', (ident, node))
@@ -354,13 +375,14 @@ class Scanner(CleanupMixin):
                         with self.guard, self.connection() as db:
                             if self._scan(db, ident)['state'] != 'running': break
                             if item.get('IsDir'):
-                                child_id = item.get('ID') if scan['cloud'] == 'gdrive' else None
-                                if scan['cloud'] == 'gdrive' and (not isinstance(child_id, str) or not re.fullmatch(r'[a-zA-Z0-9_-]{1,256}', child_id)):
-                                    raise ValueError('Thiếu ID thư mục Drive. Chưa xác nhận quét đủ.')
+                                try:
+                                    child_id, shortcut = drive_folder_id(item.get('ID')) if scan['cloud'] == 'gdrive' else (None, False)
+                                except ValueError as error:
+                                    raise ValueError(str(error)+' Mục lỗi: '+path) from None
                                 child_node = 'id:' + child_id if child_id else path
                                 if child_node in seen_folders: continue
                                 seen_folders.add(child_node)
-                                db.execute('INSERT OR IGNORE INTO queue(scan,folder,state,display_path,provider_id) VALUES(?,?,?,?,?)', (ident, child_node, 'pending', path, child_id))
+                                db.execute('INSERT OR IGNORE INTO queue(scan,folder,state,display_path,provider_id,read_only) VALUES(?,?,?,?,?,?)', (ident, child_node, 'pending', path, child_id, bool(read_only or shortcut)))
                             else:
                                 size = item.get('Size')
                                 # Rclone can report unknown size without a Google-native MIME type.

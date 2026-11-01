@@ -183,3 +183,28 @@ without rereading the completed root, and distinguish real zero-byte duplicates 
 unknown-size files. UI reports incomplete metadata and replaces stale resume success
 when polling observes a failed worker. Actual offending cloud metadata has not been
 retrieved; live recovery remains to be verified after owner installs and resumes.
+
+## Drive directory shortcut IDs — 02/11/2026
+
+Owner reported 13,601 files, 192/250 discovered directories before the old ID guard
+stopped. That guard conflated absent IDs with valid rclone composite IDs. Host metadata
+has not been retrieved, so a shortcut is a covered explanation, not a confirmed host diagnosis.
+Rclone defines directory shortcut IDs as target ID + TAB + shortcut ID:
+https://github.com/rclone/rclone/blob/master/backend/drive/drive.go (joinID/splitID).
+
+Scanner and picker now validate both components and enumerate the target by exact ID.
+Queue identity uses that target, deduplicating aliases and terminating cycles. Truly
+absent or malformed IDs still fail the scan; partial groups remain unavailable.
+No filename fallback or shortcut skipping is introduced. Descendants discovered through
+an alias are scan-only, inherited through the picker and scan queue: server cleanup
+rejects them as either selected targets or the only retained keeper. To clean these
+files, select and scan the original folder directly. When a real target was already
+queued directly, its existing path and permissions remain authoritative.
+
+Additive read_only columns on queue/locations default to false for existing entries;
+inventory.before-shortcuts.sqlite3 is created (0600) before migration. Installation
+retains keys/configuration and all completed checkpoints and starts no scan or cleanup.
+Resume re-enumerates only the unfinished directory. Tests cover composite ID validation,
+picker start, recursive inheritance, repeated targets/cycles, migration snapshot,
+checkpoint resume, truly missing IDs, and server cleanup refusal. Live continuation
+after owner installation remains to be verified.

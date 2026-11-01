@@ -213,16 +213,17 @@ class CleanupMixin:
                     raise CleanupError('Mỗi lượt chọn từ 1 đến 20 file khác nhau.')
                 selected=[]
                 for key in keys:
-                    row=db.execute('SELECT f.*,q.provider_id FROM files f JOIN queue q ON q.scan=f.scan AND q.folder=f.folder WHERE f.scan=? AND f.handle=? AND f.removed=0',(scan['id'],key)).fetchone()
+                    row=db.execute('SELECT f.*,q.provider_id,q.read_only FROM files f JOIN queue q ON q.scan=f.scan AND q.folder=f.folder WHERE f.scan=? AND f.handle=? AND f.removed=0',(scan['id'],key)).fetchone()
                     if not row or not row['hash']: raise CleanupError('File không thuộc kết quả hiện tại. Quét lại.')
                     if protected(row['path']): raise CleanupError('Không dọn thư mục trạng thái, hướng dẫn hoặc GoogleBackup-Trash.')
+                    if row['read_only']: raise CleanupError('File qua lối tắt thư mục chỉ được quét, không được dọn. Chọn thư mục gốc để quét lại.')
                     uncertain=db.execute("SELECT 1 FROM cleanup_items WHERE handle=? AND state IN ('applying','uncertain')",(key,)).fetchone()
                     if uncertain: raise CleanupError('File có thao tác chưa rõ kết quả. Quét lại trước khi chọn tiếp.')
                     selected.append(dict(row))
                 keepers={}
                 for row in selected:
-                    candidates=db.execute('SELECT f.*,q.provider_id FROM files f JOIN queue q ON q.scan=f.scan AND q.folder=f.folder WHERE f.scan=? AND f.hash=? AND f.removed=0',(scan['id'],row['hash']))
-                    keeper=next((r for r in candidates if not protected(r['path']) and r['handle'] not in keys and r['identity'] not in [s['identity'] for s in selected]),None)
+                    candidates=db.execute('SELECT f.*,q.provider_id,q.read_only FROM files f JOIN queue q ON q.scan=f.scan AND q.folder=f.folder WHERE f.scan=? AND f.hash=? AND f.removed=0',(scan['id'],row['hash']))
+                    keeper=next((r for r in candidates if not r['read_only'] and not protected(r['path']) and r['handle'] not in keys and r['identity'] not in [s['identity'] for s in selected]),None)
                     if keeper is None: raise CleanupError('Phải giữ lại ít nhất một bản mỗi nhóm. Bỏ chọn một file.')
                     keepers[row['hash']]=dict(keeper)
                 ident=uuid.uuid4().hex
