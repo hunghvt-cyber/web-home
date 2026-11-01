@@ -4,3 +4,7 @@ node_modules/
 .env*
 .vercel/
 __pycache__/
+
+# Local preview identity; not a separate hosted Site
+.openai/
+terminal-relay/.wrangler/
