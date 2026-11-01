@@ -1,6 +1,11 @@
 name: NAS Terminal relay
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'terminal-relay/**'
+      - 'lib/terminal-protocol.js'
 permissions:
   contents: read
 concurrency:
@@ -20,7 +25,7 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci --ignore-scripts
-      - run: node --test tests/nas-terminal.test.js tests/terminal-relay-runtime.test.js tests/terminal-ui.test.js
+      - run: node --test tests/nas-terminal.test.js tests/terminal-relay-runtime.test.js tests/terminal-ui.test.js tests/duplicates-nas.test.js
   deploy:
     needs: check
     if: github.ref == 'refs/heads/main'

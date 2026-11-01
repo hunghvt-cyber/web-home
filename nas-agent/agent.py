@@ -9,12 +9,13 @@ SOCKET = 'homepage-terminal-v1'
 PREFIX = 'hp_'
 
 class Agent:
-    def __init__(self, send, tmux='tmux'):
+    def __init__(self, send, tmux='tmux', scanner=None):
         self.send = send
         self.tmux = tmux
         self.views = {}
         self.sequences = collections.OrderedDict()
         self.lock = asyncio.Lock()
+        self.scanner = scanner
 
     def run(self, *args, check=True):
         return subprocess.run([self.tmux, '-f', '/dev/null', '-L', SOCKET, *args], check=check,
@@ -117,6 +118,11 @@ class Agent:
             self.sequences.move_to_end(cid)
             while len(self.sequences) > 128: self.sequences.popitem(last=False)
             try:
+                if op == 'audit':
+                    if self.scanner is None: raise ValueError('Bộ quét NAS chưa cài đặt/cấu hình. Chạy bộ cài Dọn file trùng trước.')
+                    result = await asyncio.to_thread(self.scanner.handle, c)
+                    await self.emit(cid, type='audit', requestId=ident, seq=seq, result=result)
+                    return
                 ids = self.sessions()
                 if op == 'list':
                     await self.emit(cid, type='sessions', sessions=ids)
@@ -177,6 +183,18 @@ async def main(config_path):
     try: fcntl.flock(lockfd, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError: raise SystemExit('Agent already running.')
     delay = 1
+    # Construct once: jobs survive relay/browser disconnects. Agent restart marks checkpoints interrupted.
+    from duplicates import load_scanner
+    try: scanner = load_scanner(path.parent.parent / 'homepage-duplicates' / 'config.json')
+    except Exception:
+        scanner = None
+        print('Duplicate scanner unavailable; terminal remains available. Check scanner configuration locally.', flush=True)
+    def terminate_agent(signum, frame):
+        if scanner:
+            try: scanner.shutdown()
+            except Exception: pass
+        raise SystemExit(0)
+    signal.signal(signal.SIGTERM, terminate_agent)
     while True:
         agent = None
         try:
@@ -184,7 +202,7 @@ async def main(config_path):
                                max_size=32768, max_queue=16, ping_interval=30, ping_timeout=20,
                                open_timeout=15, close_timeout=5) as ws:
                 async def send(value): await ws.send(json.dumps(value, ensure_ascii=False))
-                agent = Agent(send)
+                agent = Agent(send, scanner=scanner)
                 delay = 1
                 print('Relay connected.', flush=True)
                 async for raw in ws:

@@ -8,7 +8,7 @@ export async function verifyTicket(token,key,now=Date.now()){
  const k=await crypto.subtle.importKey('raw',encoder.encode(key),{name:'HMAC',hash:'SHA-256'},false,['verify']);
  if(!await crypto.subtle.verify('HMAC',k,bytes(s),encoder.encode(p)))throw Error('Unauthorized');
  const c=JSON.parse(new TextDecoder().decode(bytes(p))),ts=Math.floor(now/1000);
- if(c.v!==1||c.aud!=='nas-terminal'||!ID.test(c.cid||'')||!Number.isInteger(c.exp)||c.exp<=ts||c.exp>ts+300)throw Error('Unauthorized');
+ if(c.v!==1||!['nas-terminal','nas-duplicates'].includes(c.aud)||!ID.test(c.cid||'')||!Number.isInteger(c.exp)||c.exp<=ts||c.exp>ts+300)throw Error('Unauthorized');
  return c;
 }
 export default {async fetch(req,env){
@@ -46,7 +46,7 @@ export class TerminalRoom{
    if(state.role==='pending'){
     if(m.type!=='auth')throw Error('Unauthorized');
     const claims=await verifyTicket(m.token,this.env.TICKET_KEY);
-    ws.serializeAttachment({role:'browser',cid:claims.cid,exp:claims.exp*1000,budgetAt:Date.now(),count:0});
+    ws.serializeAttachment({role:'browser',cid:claims.cid,aud:claims.aud,exp:claims.exp*1000,budgetAt:Date.now(),count:0});
     await this.schedule();send(ws,{type:'ready',online:this.sockets('agent').length===1});return;
    }
    if(state.role==='browser'){
@@ -54,6 +54,7 @@ export class TerminalRoom{
     if(Date.now()-state.budgetAt>=1000){state.budgetAt=Date.now();state.count=0;}
     if(++state.count>80)throw Error('Rate limit');ws.serializeAttachment(state);
     const c=command(m.command),agent=this.sockets('agent')[0];
+    if((state.aud==='nas-duplicates')!==(c.op==='audit'))throw Error('Wrong scope');
     if(!agent){send(ws,{type:'error',seq:c.seq,error:'NAS chưa kết nối. Lệnh chưa được gửi.'});return;}
     send(agent,{type:'command',cid:state.cid,command:c});return;
    }

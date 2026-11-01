@@ -37,6 +37,17 @@ class AgentTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(os.read(r,100),b'hello')
             self.assertEqual(self.events[-1]['type'],'error')
         finally:os.close(r);os.close(w)
+
+    async def test_scan_request_uses_no_shell_and_is_not_replayed(self):
+        calls=[]
+        class Scanner:
+            def handle(self, command):calls.append(command);return {'scan':None}
+        self.agent.scanner=Scanner()
+        await self.cmd('audit',1,action='status')
+        self.assertEqual(self.events[-1]['type'],'audit')
+        self.assertEqual(self.runs,[])
+        await self.cmd('audit',1,action='status')
+        self.assertEqual(len(calls),1)
     async def test_input_requires_attachment_owned_by_caller(self):
         self.ids.append('a'*32)
         await self.cmd('input',1,data='x')
