@@ -2,9 +2,11 @@
 
 ## Dọn file trùng — 01/11/2026
 
-Mục nhỏ trên Homepage mở `/don-file-trung/` ở tab mới. Bản đầu chỉ phân tích một
-inventory JSON của từng cloud trên thiết bị, không tải dữ liệu lên server hay xóa file.
-Quét NAS trực tiếp chưa kết nối. Xem [phạm vi và giới hạn](DUPLICATES.md).
+Mục nhỏ trên Homepage mở `/don-file-trung/` ở tab mới. Bộ quét NAS chỉ đọc được
+chuẩn bị qua relay outbound đang có, ticket riêng `nas-duplicates`, allowlist rclone
+và checkpoint SQLite trên `/vol1`. Cần chạy bộ cài riêng trên host trước khi dùng;
+không coi source/CI/relay deploy là bằng chứng quét cloud thật. Chưa có chức năng xóa.
+Đọc JSON cục bộ vẫn có dưới mục phụ. Xem [triển khai và giới hạn](DUPLICATES.md).
 
 ## NAS Terminal — candidate 01/11/2026
 

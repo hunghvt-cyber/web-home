@@ -1,4 +1,5 @@
 import terminalApi from '../lib/terminal-api.js';
+import duplicatesApi from '../lib/duplicates-api.js';
 import notesAuthService from '../lib/notes-auth-service.js';
 import { session, owner, sameOrigin, body, requireConfig, reply, fail, HttpError } from '../lib/security.js';
 import { checkAttempts } from '../lib/login-limit.js';
@@ -7,6 +8,7 @@ export function createAuthHandler({limit=checkAttempts,passwordStore=passwords}=
  return async function handler(req,res){
   try{
    if(req.query?.service==='terminal')return terminalApi(req,res);
+   if(req.query?.service==='duplicates')return duplicatesApi(req,res);
    if(req.query?.service==='notes')return notesAuthService(req,res);
    requireConfig('PORTAL_PASSWORD','SESSION_PASSWORD','PORTAL_BASE_URL');
    if(req.method==='GET'&&req.query?.health==='supabase'){

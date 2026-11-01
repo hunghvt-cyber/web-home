@@ -10,8 +10,25 @@
 </head>
 <body><main class="duplicates-page">
   <header><a href="/">← Trang chủ</a><span class="badge">CÔNG CỤ CLOUD</span><h1>Dọn file trùng</h1><p>Tìm các bản có cùng nội dung trong từng cloud.</p></header>
+  <div class="account noprint"><span id="account-state">Đang kiểm tra…</span> · <a href="/#portal-account" target="_blank" rel="noopener">Mở khóa tại Homepage</a><p id="account-message" role="status"></p></div>
+  <section><div class="bar"><h2>Quét nền trên NAS</h2><span class="badge">Chỉ đọc</span></div><div class="body">
+    <p id="nas-scan-message" role="status" aria-live="polite">Mở khóa Homepage để kết nối NAS.</p>
+    <div id="nas-scan-workspace" hidden>
+      <button id="nas-scan-connect" type="button">Kết nối NAS</button>
+      <form id="nas-scan-form">
+        <label for="nas-scan-cloud">Cloud</label><select id="nas-scan-cloud" disabled><option value="gdrive">Google Drive</option><option value="koofr">Koofr</option></select>
+        <label for="nas-scan-path">Thư mục trong cloud</label><input id="nas-scan-path" type="text" maxlength="1024" placeholder="Để trống để quét toàn cloud" disabled>
+        <button id="nas-scan-start" type="submit" disabled>Bắt đầu quét</button>
+      </form>
+      <div class="scan-actions"><button id="nas-scan-refresh" type="button" disabled>Lượt gần nhất</button><button id="nas-scan-pause" type="button" disabled>Tạm dừng</button><button id="nas-scan-resume" type="button" disabled>Tiếp tục</button></div>
+      <p id="nas-scan-progress" role="status"></p>
+      <p class="muted">Đóng trang vẫn quét tiếp. NAS khởi động lại sẽ giữ checkpoint và chờ bấm Tiếp tục. Chỉ đọc danh sách và checksum, không tải nội dung, không xóa file.</p>
+      <div id="nas-scan-results" hidden><h3>Nhóm trùng</h3><p class="muted">Mỗi nhóm giữ một bản thì dung lượng dư được ước tính như bên dưới. Chưa có chức năng xóa.</p><div id="nas-scan-groups"></div><button id="nas-scan-more" type="button" hidden>Xem thêm nhóm</button></div>
+    </div>
+  </div></section>
+  <details><summary>Đọc danh sách JSON có sẵn</summary>
   <section><div class="bar"><h2>Rà soát file</h2><span class="badge">Chỉ đọc</span></div><div class="body">
-    <p>Bản đầu đọc danh sách file đã quét. Kết nối quét trực tiếp từ NAS chưa được thiết lập.</p>
+    <p>Phân tích một danh sách đã quét ngay trên thiết bị.</p>
     <form id="duplicate-form">
       <label for="duplicate-cloud">Cloud của danh sách</label>
       <select id="duplicate-cloud"><option value="gdrive">Google Drive</option><option value="koofr">Koofr</option></select>
@@ -23,11 +40,12 @@
     <p id="duplicate-status" role="status" aria-live="polite">Chưa có dữ liệu quét.</p>
     <p class="muted">Danh sách được xử lý ngay trên thiết bị, không tải lên server. Chỉ so sánh kích thước và checksum; file thiếu checksum được bỏ qua.</p>
   </div></section>
+  </details>
   <section id="duplicate-results" hidden><div class="bar"><h2>Kết quả rà soát</h2></div><div class="body">
     <p id="duplicate-summary"></p><p class="muted">Dung lượng dư là ước tính nếu giữ một bản mỗi nhóm. Chưa di chuyển hoặc xóa file nào.</p>
     <div id="duplicate-groups"></div><button id="duplicate-more" type="button" hidden>Xem thêm nhóm</button>
   </div></section>
   <details><summary>Cách lấy danh sách file</summary><div class="body"><p>Workflow “Read-only duplicate audit” trong repo backup-drive xuất các file drive.json, koofr.json và trash.json. Chọn đúng cloud tương ứng; mỗi file được phân tích riêng.</p><p>Hoặc dùng script scripts/duplicate_inventory.py trong repo web-home trên máy đã cấu hình rclone. Script chỉ liệt kê metadata và checksum, không tải nội dung hoặc xóa file.</p><p>Bước dọn có chọn sẽ được bổ sung sau: kiểm tra lại nội dung và bắt buộc giữ ít nhất một bản mỗi nhóm.</p></div></details>
   <footer>Homepage · Google Drive và Koofr được rà soát riêng.</footer>
-</main><script type="module" src="/duplicates.js"></script></body>
+</main><script src="/account.js" defer></script><script src="/duplicates-nas.js" defer></script><script type="module" src="/duplicates.js"></script></body>
 </html>

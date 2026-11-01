@@ -16,7 +16,7 @@ test('inventory displays as text; switching cloud clears all old results', async
   const details = d.querySelector('.duplicate-group'); details.open = true;
   details.dispatchEvent(new w.Event('toggle'));
   assert.match(details.textContent, /<img/); assert.equal(details.querySelector('img'),null);
-  assert.equal(d.querySelectorAll('button').length,2);
+  assert.equal(d.querySelectorAll('#duplicate-form button').length,1);
   d.getElementById('duplicate-cloud').value='koofr';
   d.getElementById('duplicate-cloud').dispatchEvent(new w.Event('change'));
   assert.equal(d.getElementById('duplicate-results').hidden,true);
