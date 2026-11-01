@@ -1,5 +1,12 @@
 # NAS Terminal — 01/11/2026
 
+## Trạng thái triển khai 18:41 ngày 01/11/2026
+
+PR #36 đã merge tại `629329880bb151fd81882bf37214afff447c5d86`. Homepage deployment `dpl_CQn8xBbnxX47rfzwKafGoyFJ8gGr` READY; terminal chưa được kích hoạt. Bootstrap run [41302975431](https://github.com/hunghvt-cyber/web-home/actions/runs/41302975431) check PASS nhưng deploy dừng trước lệnh Cloudflare với `Invalid CLOUDFLARE_ACCOUNT_ID secret`. Token secret có mặt; chưa xác minh token bằng API. Không in giá trị secret. Cần sửa Account ID đúng 32 ký tự hex; chưa có relay/agent NAS thật hoặc số đo tài nguyên. Workflow bootstrap một lần đã được gỡ; workflow manual chính được giữ.
+
+Những mô tả candidate/chưa merge phía dưới là phạm vi thiết kế và bằng chứng trước triển khai; trạng thái ở mục này được ưu tiên.
+
+
 ## Phạm vi và kiến trúc
 
 Trang `/nas/terminal/` thuộc **web-home**, Vercel project **homepage-nas**. Giao diện HTML/JS thuần, xterm được bundle từ npm; không tải script CDN. Agent Python và relay Cloudflare Worker/Durable Object cùng repo nhưng triển khai độc lập.
