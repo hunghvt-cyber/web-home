@@ -71,6 +71,7 @@ class Scanner:
             raise ValueError('Unsafe scan directory')
         self.directory.chmod(0o700)
         self.db = self.directory / 'inventory.sqlite3'
+        existing_database = self.db.exists()
         if self.db.is_symlink(): raise ValueError('Unsafe database')
         self.roots = roots
         for cloud, root in roots.items():
@@ -95,7 +96,26 @@ class Scanner:
                 PRIMARY KEY(scan,identity));
               CREATE INDEX IF NOT EXISTS duplicate_hash ON files(scan,hash);
               CREATE INDEX IF NOT EXISTS scan_folder ON files(scan,folder);
+              CREATE TABLE IF NOT EXISTS locations (
+                handle TEXT PRIMARY KEY, cloud TEXT NOT NULL, parent TEXT, path TEXT NOT NULL,
+                provider_id TEXT, backend TEXT NOT NULL);
+              CREATE INDEX IF NOT EXISTS location_parent ON locations(cloud,parent,backend);
+              CREATE INDEX IF NOT EXISTS location_lookup ON locations(parent,cloud,backend,path,provider_id);
+              CREATE TABLE IF NOT EXISTS folder_pages (
+                parent TEXT NOT NULL, listing TEXT NOT NULL, ordinal INTEGER NOT NULL,
+                handle TEXT NOT NULL, PRIMARY KEY(parent,listing,ordinal));
             ''')
+            columns = {r['name'] for r in db.execute('PRAGMA table_info(queue)')}
+            if 'display_path' not in columns:
+                backup = self.directory / 'inventory.before-folder-picker.sqlite3'
+                if existing_database and not backup.exists():
+                    fd = os.open(backup, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600); os.close(fd)
+                    target = sqlite3.connect(backup)
+                    try: db.backup(target)
+                    finally: target.close()
+                db.execute('ALTER TABLE queue ADD COLUMN display_path TEXT')
+                db.execute('ALTER TABLE queue ADD COLUMN provider_id TEXT')
+                db.execute('UPDATE queue SET display_path=folder')
             db.execute("UPDATE scans SET state='interrupted',updated=? WHERE state IN ('running','pausing')", (time.time(),))
             db.execute("UPDATE queue SET state='pending' WHERE state='working'")
         self.db.chmod(0o600)
@@ -122,13 +142,16 @@ class Scanner:
         return row
 
     def handle(self, command):
+        if command.get('action') == 'browse': return self.browse(command)
         with self.guard, self.connection() as db:
             action, ident = command.get('action'), command.get('scanId')
             if action == 'roots':
-                return {'clouds': [name for name in ('gdrive', 'koofr') if name in self.roots], 'version': 1}
+                return {'clouds': [name for name in ('gdrive', 'koofr') if name in self.roots], 'version': 2}
             if action == 'start':
                 cloud, path = command.get('cloud'), scope(command.get('path', ''))
                 if cloud not in self.roots: raise ValueError('Cloud chưa được cấu hình trên NAS.')
+                location = self.location(db, cloud, command['location']) if command.get('location') else None
+                if location: path = location['path']
                 # Recent clicks with the same request ID are idempotent even after reconnect.
                 ident = command.get('id')
                 if not isinstance(ident, str) or not ID.fullmatch(ident): raise ValueError('Mã yêu cầu không hợp lệ.')
@@ -139,7 +162,9 @@ class Scanner:
                 if self.thread and self.thread.is_alive(): raise ValueError('Đang có lượt quét. Tạm dừng trước khi mở lượt khác.')
                 now = time.time()
                 db.execute('INSERT INTO scans(id,cloud,root,state,created,updated,backend) VALUES(?,?,?,?,?,?,?)', (ident, cloud, path, 'running', now, now, json.dumps(self.roots[cloud],sort_keys=True)))
-                db.execute('INSERT INTO queue VALUES(?,?,?)', (ident, path, 'pending'))
+                provider_id = location['provider_id'] if location else None
+                node = 'id:' + provider_id if provider_id else path
+                db.execute('INSERT INTO queue(scan,folder,state,display_path,provider_id) VALUES(?,?,?,?,?)', (ident, node, 'pending', path, provider_id))
                 db.commit()
                 self.launch(ident)
                 return self.status(db, ident)
@@ -178,6 +203,83 @@ class Scanner:
                 rows = db.execute('SELECT path FROM files WHERE scan=? AND hash=? ORDER BY path,identity LIMIT 6 OFFSET ?', (ident, key, offset)).fetchall()
                 return {'files': [dict(r) for r in rows[:5]], 'nextOffset': offset + 5 if len(rows) > 5 else None}
             raise ValueError('Thao tác không hỗ trợ.')
+
+    def location(self, db, cloud, handle):
+        if cloud not in self.roots or not isinstance(handle, str) or not ID.fullmatch(handle):
+            raise ValueError('Thư mục không hợp lệ.')
+        row = db.execute('SELECT * FROM locations WHERE handle=? AND cloud=? AND backend=?',
+                         (handle, cloud, json.dumps(self.roots[cloud], sort_keys=True))).fetchone()
+        if not row: raise ValueError('Thư mục đã hết hiệu lực. Chọn lại từ gốc cloud.')
+        return row
+
+    def listing_command(self, cloud, path, provider_id=None, folders=False):
+        root = self.roots[cloud]
+        if provider_id:
+            if cloud != 'gdrive' or not re.fullmatch(r'[a-zA-Z0-9_-]{1,256}', provider_id):
+                raise ValueError('ID thư mục không hợp lệ.')
+            target, extra = root['remote'] + ':', ['--drive-root-folder-id', provider_id]
+        else:
+            target = root['remote'] + ':' + '/'.join(p for p in (root.get('path', '').strip('/'), path) if p)
+            extra = []
+        return [self.rclone, 'lsjson', target, '--dirs-only' if folders else '--hash',
+                '--tpslimit', '2', '--checkers', '2', '--retries', '1' if folders else '2',
+                '--low-level-retries', '1' if folders else '3', '--contimeout', '10s',
+                '--timeout', '12s' if folders else '60s', '--log-level', 'ERROR', *extra]
+
+    def browse(self, command):
+        cloud, handle, offset = command.get('cloud'), command.get('location'), command.get('offset', 0)
+        if cloud not in self.roots or type(offset) is not int or not 0 <= offset <= 5000:
+            raise ValueError('Yêu cầu thư mục không hợp lệ.')
+        backend = json.dumps(self.roots[cloud], sort_keys=True)
+        with self.guard, self.connection() as db:
+            if not handle:
+                row = db.execute('SELECT handle FROM locations WHERE cloud=? AND parent IS NULL AND backend=?', (cloud, backend)).fetchone()
+                handle = row['handle'] if row else uuid.uuid4().hex
+                if not row: db.execute('INSERT INTO locations VALUES(?,?,?,?,?,?)', (handle, cloud, None, '', None, backend))
+            current = dict(self.location(db, cloud, handle))
+        if offset == 0:
+            # Metadata only, no scanner lock held during provider I/O. Fail closed on incomplete lists.
+            process = subprocess.Popen(self.listing_command(cloud, current['path'], current['provider_id'], folders=True),
+                                       stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, encoding='utf-8')
+            timer = threading.Timer(15, process.kill); timer.daemon = True; timer.start()
+            folders = []
+            try:
+                for item in array_items(process.stdout):
+                    if not item.get('IsDir'): continue
+                    name = item.get('Name')
+                    if not isinstance(name, str) or not name or '/' in name or '\x00' in name or name in ('.', '..'):
+                        raise ValueError('Metadata thư mục không hợp lệ.')
+                    path = current['path'] + '/' + name if current['path'] else name
+                    if len(path) > 1024: raise ValueError('Đường dẫn quá dài.')
+                    provider_id = item.get('ID') if cloud == 'gdrive' else None
+                    if cloud == 'gdrive' and (not isinstance(provider_id, str) or not re.fullmatch(r'[a-zA-Z0-9_-]{1,256}', provider_id)):
+                        raise ValueError('Thiếu ID thư mục Drive; chưa thể chọn an toàn.')
+                    folders.append((name, path, provider_id))
+                    if len(folders) > 5000: raise ValueError('Thư mục vượt 5.000 thư mục con; cần thu hẹp phạm vi.')
+                if process.wait(timeout=2): raise ValueError('Không tải đủ thư mục. Kiểm tra mạng/quyền truy cập rồi thử lại.')
+            except Exception:
+                raise ValueError('Chưa tải được đầy đủ danh sách thư mục. Thử lại hoặc kiểm tra quyền cloud.') from None
+            finally:
+                timer.cancel()
+                if process.poll() is None: process.kill(); process.wait(timeout=2)
+                process.stdout.close()
+            listing = uuid.uuid4().hex
+            with self.guard, self.connection() as db:
+                db.execute('DELETE FROM folder_pages WHERE parent=?', (handle,))
+                for index, (name, path, provider_id) in enumerate(sorted(folders, key=lambda f:(f[0].casefold(), f[2] or ''))):
+                    previous = db.execute('SELECT handle FROM locations WHERE parent=? AND cloud=? AND backend=? AND path=? AND provider_id IS ?', (handle, cloud, backend, path, provider_id)).fetchone()
+                    child = previous['handle'] if previous else uuid.uuid4().hex
+                    if not previous: db.execute('INSERT INTO locations VALUES(?,?,?,?,?,?)', (child, cloud, handle, path, provider_id, backend))
+                    db.execute('INSERT INTO folder_pages VALUES(?,?,?,?)', (handle, listing, index, child))
+        else:
+            listing = command.get('listing')
+            if not isinstance(listing, str) or not ID.fullmatch(listing): raise ValueError('Trang thư mục hết hiệu lực. Tải lại danh sách.')
+        with self.guard, self.connection() as db:
+            rows = db.execute('WITH ranked AS (SELECT l.handle,l.path,p.ordinal,COUNT(*) OVER(PARTITION BY l.path) copies,ROW_NUMBER() OVER(PARTITION BY l.path ORDER BY p.ordinal) duplicate_index FROM folder_pages p JOIN locations l ON l.handle=p.handle WHERE p.parent=? AND p.listing=?) SELECT * FROM ranked ORDER BY ordinal LIMIT 6 OFFSET ?', (handle, listing, offset)).fetchall()
+            if offset and not rows: raise ValueError('Danh sách đã đổi. Tải lại thư mục.')
+        return {'location': handle, 'parent': current['parent'], 'path': current['path'], 'cloud': cloud,
+                'listing': listing, 'folders': [{'location':r['handle'], 'name':r['path'].rsplit('/',1)[-1], 'duplicateCount':r['copies'], 'duplicateIndex':r['duplicate_index']} for r in rows[:5]],
+                'nextOffset': offset+5 if len(rows)>5 else None}
 
     def status(self, db, ident):
         row = self._scan(db, ident)
@@ -218,16 +320,14 @@ class Scanner:
                     scan = self._scan(db, ident)
                     if scan['state'] != 'running':
                         db.execute("UPDATE scans SET state='paused',updated=? WHERE id=? AND state='pausing'", (time.time(), ident)); return
-                    folder = db.execute("SELECT folder FROM queue WHERE scan=? AND state='pending' ORDER BY folder LIMIT 1", (ident,)).fetchone()
+                    folder = db.execute("SELECT folder,display_path,provider_id FROM queue WHERE scan=? AND state='pending' ORDER BY folder LIMIT 1", (ident,)).fetchone()
                     if not folder:
                         db.execute("UPDATE scans SET state='complete',updated=? WHERE id=?", (time.time(), ident)); return
-                    folder = folder['folder']
-                    db.execute("UPDATE queue SET state='working' WHERE scan=? AND folder=?", (ident, folder))
-                    db.execute('DELETE FROM files WHERE scan=? AND folder=?', (ident, folder))
-                    root = self.roots[scan['cloud']]
-                    target = root['remote'] + ':' + '/'.join(p for p in (root.get('path', '').strip('/'), folder) if p)
+                    node, folder, provider_id = folder['folder'], folder['display_path'], folder['provider_id']
+                    db.execute("UPDATE queue SET state='working' WHERE scan=? AND folder=?", (ident, node))
+                    db.execute('DELETE FROM files WHERE scan=? AND folder=?', (ident, node))
                     # Fixed read-only command, one remote only. API pacing also limits camera/network impact.
-                    self.process = subprocess.Popen([self.rclone, 'lsjson', target, '--hash', '--tpslimit', '2', '--checkers', '2', '--retries', '2', '--low-level-retries', '3', '--contimeout', '20s', '--timeout', '60s', '--log-level', 'ERROR'],
+                    self.process = subprocess.Popen(self.listing_command(scan['cloud'], folder, provider_id),
                                                     stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, encoding='utf-8')
                 process = self.process
                 # Kill a hung directory call; it will be re-enumerated on explicit resume.
@@ -243,9 +343,13 @@ class Scanner:
                         with self.guard, self.connection() as db:
                             if self._scan(db, ident)['state'] != 'running': break
                             if item.get('IsDir'):
-                                if name in seen_folders: raise ValueError('Thư mục trùng tên trên Drive; cần chọn phạm vi không mơ hồ.')
-                                seen_folders.add(name)
-                                db.execute('INSERT OR IGNORE INTO queue VALUES(?,?,?)', (ident, path, 'pending'))
+                                child_id = item.get('ID') if scan['cloud'] == 'gdrive' else None
+                                if scan['cloud'] == 'gdrive' and (not isinstance(child_id, str) or not re.fullmatch(r'[a-zA-Z0-9_-]{1,256}', child_id)):
+                                    raise ValueError('Thiếu ID thư mục Drive. Chưa xác nhận quét đủ.')
+                                child_node = 'id:' + child_id if child_id else path
+                                if child_node in seen_folders: continue
+                                seen_folders.add(child_node)
+                                db.execute('INSERT OR IGNORE INTO queue(scan,folder,state,display_path,provider_id) VALUES(?,?,?,?,?)', (ident, child_node, 'pending', path, child_id))
                             else:
                                 size = item.get('Size')
                                 if size == -1 and str(item.get('MimeType', '')).startswith('application/vnd.google-apps.'):
@@ -258,7 +362,7 @@ class Scanner:
                                     if digest:
                                         key = str(size) + ':' + algorithm + ':' + digest.lower(); break
                                 identity = 'id:' + str(item['ID']) if item.get('ID') else 'path:' + path
-                                db.execute('INSERT OR REPLACE INTO files VALUES(?,?,?,?,?,?)', (ident, identity, folder, path, size, key))
+                                db.execute('INSERT OR REPLACE INTO files VALUES(?,?,?,?,?,?)', (ident, identity, node, path, size, key))
                                 db.execute('UPDATE scans SET updated=? WHERE id=?', (time.time(), ident))
                     code = process.wait(timeout=10)
                     with self.guard, self.connection() as db:
@@ -266,7 +370,7 @@ class Scanner:
                         if state == 'pausing':
                             db.execute("UPDATE scans SET state='paused',updated=? WHERE id=?", (time.time(), ident)); return
                         if code: raise ValueError('Không đọc đủ thư mục (mạng/quyền truy cập/rclone). Bấm Tiếp tục để thử lại.')
-                        db.execute("UPDATE queue SET state='done' WHERE scan=? AND folder=?", (ident, folder))
+                        db.execute("UPDATE queue SET state='done' WHERE scan=? AND folder=?", (ident, node))
                         db.execute('UPDATE scans SET updated=? WHERE id=?', (time.time(), ident))
                 finally:
                     timer.cancel()

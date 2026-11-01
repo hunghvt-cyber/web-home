@@ -13,7 +13,7 @@ test('NAS UI requests typed scans only, renders paths as text and clears data on
     close(){this.readyState=3;}
     send(raw){const value=JSON.parse(raw);if(value.type==='auth'){queueMicrotask(()=>this.onmessage({data:JSON.stringify({type:'ready',online:true})}));return;}
       const c=value.command;calls.push(c);
-      const result=c.action==='roots'?{clouds:['gdrive','koofr']}:c.action==='groups'?{groups:[{hash:'10:MD5:'+'a'.repeat(32),size:10,copies:2}],nextOffset:null}:c.action==='files'?{files:[{path:'<img src=x onerror=alert(1)>'}],nextOffset:null}:{scan};
+      const result=c.action==='roots'?{clouds:['gdrive','koofr'],version:2}:c.action==='browse'?{cloud:'gdrive',location:c.location||'b'.repeat(32),parent:c.location?'b'.repeat(32):null,path:c.location?'Photos':'',listing:'d'.repeat(32),folders:c.location?[]:[{name:'Photos',location:'c'.repeat(32)}],nextOffset:null}:c.action==='groups'?{groups:[{hash:'10:MD5:'+'a'.repeat(32),size:10,copies:2}],nextOffset:null}:c.action==='files'?{files:[{path:'<img src=x onerror=alert(1)>'}],nextOffset:null}:{scan};
       queueMicrotask(()=>this.onmessage({data:JSON.stringify({type:'audit',seq:c.seq,requestId:c.id,result})}));
     }
   }
@@ -28,6 +28,12 @@ test('NAS UI requests typed scans only, renders paths as text and clears data on
   assert.match(details.textContent,/<img/);assert.equal(details.querySelector('img'),null);
   assert.ok(calls.every(c=>c.op==='audit'));
   assert.ok(calls.some(c=>c.action==='roots'));assert.ok(calls.some(c=>c.action==='files'));
+  d.getElementById('nas-folder-open').click();await new Promise(r=>setImmediate(r));
+  assert.equal(d.getElementById('nas-folder-list').children.length,1);
+  d.querySelector('.cloud-folder').click();await new Promise(r=>setImmediate(r));
+  assert.match(d.getElementById('nas-folder-title').textContent,/Photos/);
+  d.getElementById('nas-folder-choose').click();await new Promise(r=>setImmediate(r));
+  const start=calls.find(c=>c.action==='start');assert.equal(start.location,'c'.repeat(32));assert.equal(start.path,undefined);
   w.dispatchEvent(new w.CustomEvent('account-change',{detail:{authenticated:false}}));
   assert.equal(socket.readyState,3);assert.equal(d.getElementById('nas-scan-groups').children.length,0);
   assert.equal(d.getElementById('nas-scan-workspace').hidden,true);w.close();

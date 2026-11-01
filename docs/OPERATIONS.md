@@ -6,6 +6,7 @@ Mục nhỏ trên Homepage mở `/don-file-trung/` ở tab mới. Bộ quét NAS
 chuẩn bị qua relay outbound đang có, ticket riêng `nas-duplicates`, allowlist rclone
 và checkpoint SQLite trên `/vol1`. Cần chạy bộ cài riêng trên host trước khi dùng;
 không coi source/CI/relay deploy là bằng chứng quét cloud thật. Chưa có chức năng xóa.
+Bản v2 thêm chọn thư mục bằng chạm, Drive dùng ID để phân biệt trùng tên; cần cập nhật agent NAS.
 Đọc JSON cục bộ vẫn có dưới mục phụ. Xem [triển khai và giới hạn](DUPLICATES.md).
 
 ## NAS Terminal — candidate 01/11/2026

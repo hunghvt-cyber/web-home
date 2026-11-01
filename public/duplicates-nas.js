@@ -1,21 +1,26 @@
 (()=>{
   const $=id=>document.getElementById(id),uuid=()=>crypto.randomUUID().replaceAll('-','');
   const names={gdrive:'Google Drive',koofr:'Koofr'},states={running:'Đang quét',pausing:'Đang tạm dừng',paused:'Đã tạm dừng',interrupted:'Bị gián đoạn',failed:'Chưa hoàn tất',complete:'Đã quét xong'};
-  let ws=null,online=false,seq=0,scan=null,offset=0,groupScan=null,poll=null,renew=null,connecting=false,auth=false,epoch=0;
+  let ws=null,online=false,seq=0,scan=null,offset=0,groupScan=null,poll=null,renew=null,connecting=false,auth=false,epoch=0,pickerReady=false,selectedLocation=null,browsed=null,pickerBusy=false,pickerEpoch=0;
   const pending=new Map();
   const message=text=>{$('nas-scan-message').textContent=text;};
   const bytes=n=>new Intl.NumberFormat('vi-VN',{maximumFractionDigits:2}).format(n/1024/1024)+' MiB';
   function controls(){
     const ready=auth&&online&&ws?.readyState===WebSocket.OPEN;
     $('nas-scan-connect').disabled=!auth||connecting||!!ws;
-    for(const id of ['nas-scan-cloud','nas-scan-path','nas-scan-refresh'])$(id).disabled=!ready;
-    $('nas-scan-start').disabled=!ready||['running','pausing'].includes(scan?.state);
+    for(const id of ['nas-scan-cloud','nas-scan-refresh'])$(id).disabled=!ready;
+    $('nas-scan-start').disabled=!ready||!selectedLocation||['running','pausing'].includes(scan?.state);
+    $('nas-folder-open').disabled=!ready||!pickerReady;
+    for(const id of ['nas-folder-root','nas-folder-reload','nas-folder-more'])$(id).disabled=!ready||pickerBusy;
+    $('nas-folder-up').disabled=!ready||pickerBusy||!browsed?.parent;
+    for(const button of document.querySelectorAll('.cloud-folder'))button.disabled=!ready||pickerBusy;
+    $('nas-folder-choose').disabled=!ready||pickerBusy||!browsed||['running','pausing'].includes(scan?.state);
     $('nas-scan-pause').disabled=!ready||scan?.state!=='running';
     $('nas-scan-resume').disabled=!ready||!['paused','failed','interrupted'].includes(scan?.state);
   }
   function stop(){
     clearInterval(poll);clearTimeout(renew);poll=null;renew=null;
-    const old=ws;ws=null;old?.close();online=false;connecting=false;
+    const old=ws;ws=null;old?.close();online=false;connecting=false;pickerBusy=false;pickerEpoch++;
     for(const req of pending.values()){clearTimeout(req.timer);req.reject(new Error('Mất kết nối. Lượt quét đang chạy vẫn được giữ; kết nối lại để kiểm tra.'));}pending.clear();controls();
   }
   function request(action,extra={}){
@@ -78,9 +83,10 @@
           online=value.type==='online'||value.online;connecting=false;controls();
           if(!online){message('Relay đã nối nhưng NAS đang offline.');return;}
           try{
-            const roots=await request('roots');
+            const roots=await request('roots');pickerReady=roots.version>=2;
             for(const option of $('nas-scan-cloud').options)option.disabled=!roots.clouds.includes(option.value);
             if(!roots.clouds.includes($('nas-scan-cloud').value))$('nas-scan-cloud').value=roots.clouds[0]||'';
+            if(!pickerReady){message('Cần cập nhật bộ quét trên NAS để chọn thư mục.');controls();return;}
             await refresh();clearInterval(poll);poll=setInterval(()=>{if(online&&pending.size===0)refresh();},5000);
           }catch(error){message(error.message);}
         }else if(value.type==='offline'){stop();message('NAS mất kết nối; bấm Kết nối NAS để kiểm tra lại.');}
@@ -97,12 +103,53 @@
   }
   $('nas-scan-connect').onclick=connect;
   $('nas-scan-refresh').onclick=()=>{epoch++;clearGroups();refresh(true);};
-  $('nas-scan-form').onsubmit=async event=>{event.preventDefault();$('nas-scan-start').disabled=true;epoch++;clearGroups();try{await render(await request('start',{cloud:$('nas-scan-cloud').value,path:$('nas-scan-path').value}));}catch(error){message(error.message);}finally{controls();}};
+  async function startScan(){
+    if(!selectedLocation)return;const selected={...selectedLocation};$('nas-scan-start').disabled=true;epoch++;clearGroups();
+    try{await render(await request('start',{cloud:selected.cloud,location:selected.location}));}catch(error){message(error.message);}finally{controls();}
+  }
+  $('nas-scan-form').onsubmit=async event=>{event.preventDefault();await startScan();};
+  async function browse(location,more=false){
+    if(!online||!pickerReady)return;
+    const cloud=$('nas-scan-cloud').value,stamp=++pickerEpoch;
+    const previous=browsed;pickerBusy=true;controls();
+    if(!more){browsed=null;$('nas-folder-list').replaceChildren();$('nas-folder-more').hidden=true;}
+    $('nas-folder-status').textContent='Đang tải thư mục…';
+    try{
+      const result=await request('browse',{cloud,...(location?{location}:{}),...(more?{offset:previous.nextOffset,listing:previous.listing}:{})});
+      if(stamp!==pickerEpoch||cloud!==$('nas-scan-cloud').value)return;
+      browsed=result;$('nas-folder-title').textContent=names[cloud]+' / '+(result.path||'(gốc cloud)');
+      for(const folder of result.folders){
+        const button=document.createElement('button');button.type='button';button.className='cloud-folder';
+        button.textContent='📁 '+folder.name+(folder.duplicateCount>1?' ('+folder.duplicateIndex+'/'+folder.duplicateCount+')':'')+' ›';
+        button.onclick=()=>browse(folder.location);$('nas-folder-list').append(button);
+      }
+      $('nas-folder-more').hidden=result.nextOffset===null;
+      $('nas-folder-status').textContent=$('nas-folder-list').children.length?'Chạm thư mục để mở, hoặc quét thư mục đang xem.':'Không có thư mục con. Có thể quét thư mục này.';
+    }catch(error){if(stamp===pickerEpoch){$('nas-folder-status').textContent=error.message;}}
+    finally{if(stamp===pickerEpoch){pickerBusy=false;controls();}}
+  }
+  $('nas-folder-open').onclick=()=>{$('nas-folder-picker').hidden=false;browse(selectedLocation?.cloud===$('nas-scan-cloud').value?selectedLocation.location:undefined);};
+  $('nas-folder-close').onclick=()=>{pickerEpoch++;pickerBusy=false;$('nas-folder-picker').hidden=true;controls();};
+  $('nas-folder-root').onclick=()=>browse();
+  $('nas-folder-up').onclick=()=>{if(browsed?.parent)browse(browsed.parent);};
+  $('nas-folder-reload').onclick=()=>browse(browsed?.location);
+  $('nas-folder-more').onclick=()=>{if(browsed&&browsed.nextOffset!==null)browse(browsed.location,true);};
+  $('nas-folder-choose').onclick=async()=>{
+    if(!browsed||pickerBusy)return;
+    selectedLocation={cloud:browsed.cloud,location:browsed.location,path:browsed.path};
+    $('nas-scan-scope').textContent=names[browsed.cloud]+' / '+(browsed.path||'(toàn cloud)');
+    $('nas-folder-picker').hidden=true;await startScan();
+  };
+  $('nas-scan-cloud').addEventListener('change',()=>{
+    pickerEpoch++;pickerBusy=false;selectedLocation=null;browsed=null;
+    $('nas-scan-scope').textContent='Chưa chọn thư mục.';$('nas-folder-list').replaceChildren();
+    if(!$('nas-folder-picker').hidden)browse();controls();
+  });
   for(const action of ['pause','resume'])$('nas-scan-'+action).onclick=async()=>{if(!scan)return;try{await render(await request(action,{scanId:scan.id}));}catch(error){message(error.message);}};
   $('nas-scan-more').onclick=async()=>{const button=$('nas-scan-more');button.disabled=true;try{await groupPage();}catch(error){message(error.message);}finally{button.disabled=false;}};
   window.addEventListener('account-change',event=>{
     auth=event.detail.authenticated;$('nas-scan-workspace').hidden=!auth;
-    if(!auth){epoch++;stop();scan=null;clearGroups();$('nas-scan-progress').textContent='';message('Mở khóa Homepage để kết nối NAS.');}
+    if(!auth){epoch++;stop();scan=null;selectedLocation=null;browsed=null;pickerReady=false;clearGroups();$('nas-folder-picker').hidden=true;$('nas-folder-list').replaceChildren();$('nas-scan-scope').textContent='Chưa chọn thư mục.';$('nas-scan-progress').textContent='';message('Mở khóa Homepage để kết nối NAS.');}
     else{if(!ws)message('Bấm Kết nối NAS. Bộ quét cần được cài trên NAS trước.');controls();}
   });
   window.addEventListener('pagehide',stop);controls();

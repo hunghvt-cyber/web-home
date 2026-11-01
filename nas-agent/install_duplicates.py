@@ -66,6 +66,7 @@ def main():
     subprocess.run(['systemctl', '--user', 'restart', 'homepage-terminal.service'], check=True)
     subprocess.run(['systemctl', '--user', 'is-active', 'homepage-terminal.service'], check=True)
     print('DUPLICATES_INSTALL=PASS; clouds='+','.join(roots))
+    print('SCANNER_VERSION=2; folder picker enabled; existing cloud configuration preserved.')
     print('Read-only scanner ready. No scan started; no cloud data changed. Keys preserved.')
 
 
