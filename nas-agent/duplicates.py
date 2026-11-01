@@ -294,11 +294,11 @@ class Scanner(CleanupMixin):
         row = self._scan(db, ident)
         done = db.execute("SELECT COUNT(*) FROM queue WHERE scan=? AND state='done'", (ident,)).fetchone()[0]
         total = db.execute('SELECT COUNT(*) FROM queue WHERE scan=?', (ident,)).fetchone()[0]
-        files = db.execute('SELECT COUNT(*),COUNT(*)-COUNT(hash) FROM files WHERE scan=?', (ident,)).fetchone()
+        files = db.execute('SELECT COUNT(*),COUNT(*)-COUNT(hash),COALESCE(SUM(CASE WHEN size<0 THEN 1 ELSE 0 END),0) FROM files WHERE scan=?', (ident,)).fetchone()
         cleanup=db.execute('SELECT id FROM cleanup_plans WHERE scan=? ORDER BY created DESC LIMIT 1',(ident,)).fetchone()
         return {'scan': {'id': row['id'], 'cloud': row['cloud'], 'path': row['root'], 'state': row['state'],
                          'createdAt': row['created'], 'updatedAt': row['updated'], 'files': files[0],
-                         'unhashed': files[1], 'foldersDone': done, 'foldersDiscovered': total, 'error': row['error'], 'lastCleanup':cleanup['id'] if cleanup else None}}
+                         'unhashed': files[1], 'unknownSize':files[2], 'foldersDone': done, 'foldersDiscovered': total, 'error': row['error'], 'lastCleanup':cleanup['id'] if cleanup else None}}
 
     def launch(self, ident):
         self.thread = threading.Thread(target=self.work, args=(ident,), daemon=True)
@@ -363,15 +363,21 @@ class Scanner(CleanupMixin):
                                 db.execute('INSERT OR IGNORE INTO queue(scan,folder,state,display_path,provider_id) VALUES(?,?,?,?,?)', (ident, child_node, 'pending', path, child_id))
                             else:
                                 size = item.get('Size')
-                                if size == -1 and str(item.get('MimeType', '')).startswith('application/vnd.google-apps.'):
-                                    size = 0  # Native Google documents have no binary checksum.
-                                if type(size) is not int or size < 0: raise ValueError('Kích thước metadata không hợp lệ; chưa xác nhận quét đủ.')
+                                # Rclone can report unknown size without a Google-native MIME type.
+                                # Preserve unknown as -1, never turn it into a zero-byte duplicate.
+                                unknown_size = size is None or type(size) is int and size == -1
+                                if unknown_size: size = -1
+                                elif type(size) is not int or size < 0:
+                                    raise ValueError('Kích thước metadata sai định dạng (kiểu '+type(size).__name__+'); chưa xác nhận quét đủ.')
+                                native_document = str(item.get('MimeType', '')).startswith('application/vnd.google-apps.')
                                 hashes = item.get('Hashes') or {}
                                 key = None
-                                for algorithm, length in (('MD5', 32), ('SHA256', 64)):
-                                    digest = next((v for k, v in hashes.items() if k.upper().replace('-', '') == algorithm and isinstance(v, str) and re.fullmatch('[a-fA-F0-9]{'+str(length)+'}', v)), None)
-                                    if digest:
-                                        key = str(size) + ':' + algorithm + ':' + digest.lower(); break
+                                if not unknown_size and not native_document:
+                                    if not isinstance(hashes,dict):raise ValueError('Metadata checksum sai định dạng; chưa xác nhận quét đủ.')
+                                    for algorithm, length in (('MD5', 32), ('SHA256', 64)):
+                                        digest = next((v for k, v in hashes.items() if isinstance(k,str) and k.upper().replace('-', '') == algorithm and isinstance(v, str) and re.fullmatch('[a-fA-F0-9]{'+str(length)+'}', v)), None)
+                                        if digest:
+                                            key = str(size) + ':' + algorithm + ':' + digest.lower(); break
                                 identity = 'id:' + str(item['ID']) if item.get('ID') else 'path:' + path
                                 db.execute('INSERT OR REPLACE INTO files(scan,identity,folder,path,size,hash) VALUES(?,?,?,?,?,?)', (ident, identity, node, path, size, key))
                                 db.execute('UPDATE scans SET updated=? WHERE id=?', (time.time(), ident))

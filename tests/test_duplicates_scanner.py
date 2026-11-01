@@ -153,5 +153,42 @@ class ScannerTests(unittest.TestCase):
         scanner.handle({'action':'resume','scanId':ident});scanner.thread.join(5)
         self.assertEqual(scanner.handle({'action':'status'})['scan']['state'],'complete')
 
+    def test_unknown_size_without_mime_is_counted_but_never_grouped_as_zero(self):
+        h='a'*32
+        self.fixture.write_text(json.dumps({'drive:':[
+            {'Name':'unknown','ID':'u','Size':-1,'Hashes':{'MD5':h}},
+            {'Name':'missing-size','ID':'m','Hashes':{'MD5':h}},
+            {'Name':'native','ID':'n','Size':10,'MimeType':'application/vnd.google-apps.document','Hashes':{'MD5':h}},
+            {'Name':'normal','ID':'b','Size':10,'Hashes':{'MD5':h}},
+            {'Name':'zero-one','ID':'z1','Size':0,'Hashes':{'MD5':h}},
+            {'Name':'zero-two','ID':'z2','Size':0,'Hashes':{'MD5':h}}]}))
+        scan=self.start()
+        self.assertEqual((scan['state'],scan['files'],scan['unhashed'],scan['unknownSize']),('complete',6,3,2))
+        groups=self.scanner.handle({'action':'groups','scanId':scan['id']})['groups']
+        self.assertEqual(len(groups),1);self.assertEqual((groups[0]['size'],groups[0]['copies']),(0,2))
+        with self.scanner.connection() as db:
+            rows=db.execute("SELECT size,hash FROM files WHERE identity IN ('id:u','id:m')").fetchall()
+        self.assertTrue(all(row['size']==-1 and row['hash'] is None for row in rows))
+
+    def test_malformed_size_still_fails_closed(self):
+        for index,size in enumerate(['10',True,-2]):
+            self.fixture.write_text(json.dumps({'drive:':[{'Name':'invalid','ID':'bad','Size':size}]}))
+            scan=self.start(str(index+1)*32)
+            self.assertEqual(scan['state'],'failed')
+
+    def test_resume_reprocesses_only_failed_directory_and_keeps_completed_checkpoint(self):
+        self.fixture.write_text(json.dumps({'drive:@child-id':[
+            {'Name':'unknown','ID':'u','Size':-1},
+            {'Name':'normal','ID':'n','Size':10,'Hashes':{'MD5':'b'*32}}]}))
+        ident='9'*32
+        with self.scanner.connection() as db:
+            db.execute('INSERT INTO scans(id,cloud,root,state,created,updated,backend) VALUES(?,?,?,?,?,?,?)',(ident,'gdrive','','failed',1,1,json.dumps(self.roots['gdrive'],sort_keys=True)))
+            db.execute('INSERT INTO queue(scan,folder,state,display_path,provider_id) VALUES(?,?,?,?,?)',(ident,'','done','',None))
+            db.execute('INSERT INTO queue(scan,folder,state,display_path,provider_id) VALUES(?,?,?,?,?)',(ident,'id:child-id','working','child','child-id'))
+            db.execute('INSERT INTO files(scan,identity,folder,path,size,hash) VALUES(?,?,?,?,?,?)',(ident,'id:kept','','root-file',10,'10:MD5:'+'a'*32))
+        self.scanner.handle({'action':'resume','scanId':ident});self.scanner.thread.join(5)
+        scan=self.scanner.handle({'action':'status','scanId':ident})['scan']
+        self.assertEqual((scan['state'],scan['files'],scan['foldersDone'],scan['unknownSize']),('complete',3,2,1))
+
 
 if __name__=='__main__':unittest.main()

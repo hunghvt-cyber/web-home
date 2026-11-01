@@ -167,3 +167,19 @@ The duplicate Start scan button/form submission is removed; only the folder pick
 offline. This update changes only web UI; no NAS agent reinstall is needed. Regression
 fixtures simulate new tabs with paused/running jobs and a resume error surviving polling.
 These checks do not identify every possible host/provider failure without runtime output.
+
+## Unknown metadata size and checkpoint resume — 02/11/2026
+
+Owner reported a failed full-Drive scan at 211 files and 37/69 discovered folders.
+The resume command reached the NAS, but the worker stopped again on its size guard.
+Unknown sizes (-1, absent or null) now remain size=-1 and have no duplicate key;
+they count toward files and unknownSize/unhashed but cannot enter cleanup groups.
+They are never normalized to zero. Native Google documents also stay outside groups.
+Malformed size types and other negative sizes still stop the scan explicitly.
+
+This requires reinstalling the NAS scanner. Resume retains completed directory
+checkpoints and re-enumerates the failed directory. Regression fixtures verify this
+without rereading the completed root, and distinguish real zero-byte duplicates from
+unknown-size files. UI reports incomplete metadata and replaces stale resume success
+when polling observes a failed worker. Actual offending cloud metadata has not been
+retrieved; live recovery remains to be verified after owner installs and resumes.

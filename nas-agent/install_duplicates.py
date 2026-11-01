@@ -82,6 +82,7 @@ def main():
     subprocess.run(['systemctl', '--user', 'is-active', 'homepage-terminal.service'], check=True)
     print('DUPLICATES_INSTALL=PASS; clouds='+','.join(roots))
     print('SCANNER_VERSION=3; recoverable cleanup enabled; existing cloud configuration preserved.')
+    print('METADATA_SIZE_FIX=enabled; unknown-size files are counted and excluded from cleanup.')
     print('No scan or cleanup started by installation. No cloud data changed. Keys preserved.')
 
 
