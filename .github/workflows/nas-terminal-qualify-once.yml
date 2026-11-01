@@ -6,7 +6,11 @@ on:
 permissions:
   contents: read
 jobs:
+  deploy:
+    uses: ./.github/workflows/nas-terminal-relay.yml
+    secrets: inherit
   verify:
+    needs: deploy
     runs-on: ubuntu-latest
     timeout-minutes: 4
     steps:
@@ -35,7 +39,7 @@ jobs:
           from websockets.asyncio.client import connect
           base='https://homepage-nas-terminal.thanhhunga4-wtf.workers.dev'
           def enc(b):return base64.urlsafe_b64encode(b).rstrip(b'=').decode()
-          key=os.environ['TICKET_KEY']
+          key=os.environ['TICKET_KEY'].strip()
           if len(key)<32:raise SystemExit('Missing terminal ticket key')
           async def main():
               claims={'v':1,'aud':'nas-terminal','exp':int(time.time())+180,'cid':secrets.token_hex(16)}

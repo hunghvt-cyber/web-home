@@ -56,3 +56,10 @@ test('expired browser cannot inject input and alarm removes expired sockets',asy
  await room.webSocketMessage(browser,JSON.stringify({type:'command',command:{op:'input',id,seq:1,data:'bad'}}));assert.equal(browser.readyState,3);assert.equal(agent.messages.length,0);
  await room.alarm();
 });
+
+test('clipboard edge whitespace is normalized consistently and internal whitespace fails closed',()=>{
+ const env={NAS_TERMINAL_ENABLED:'true',NAS_TERMINAL_RELAY_URL:'https://relay.example',NAS_TERMINAL_TICKET_KEY:'  '+key+'\r\n'};
+ assert.equal(terminalConfig(env).key,key);
+ assert.throws(()=>terminalConfig({...env,NAS_TERMINAL_TICKET_KEY:'x'.repeat(31)+'\n'}),{status:503});
+ assert.throws(()=>terminalConfig({...env,NAS_TERMINAL_TICKET_KEY:'x'.repeat(32)+' '+'y'.repeat(32)}),{status:503});
+});

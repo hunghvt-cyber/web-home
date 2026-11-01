@@ -1,6 +1,7 @@
 name: NAS Terminal relay
 on:
   workflow_dispatch:
+  workflow_call:
 permissions:
   contents: read
 concurrency:
@@ -46,9 +47,11 @@ jobs:
           import os,re
           if not os.environ.get('CLOUDFLARE_API_TOKEN'):raise SystemExit('Missing CLOUDFLARE_API_TOKEN secret')
           if not re.fullmatch(r'[a-f0-9]{32}',os.environ.get('CLOUDFLARE_ACCOUNT_ID','')):raise SystemExit('Invalid CLOUDFLARE_ACCOUNT_ID secret')
-          ticket,agent=os.environ.get('TICKET_KEY',''),os.environ.get('AGENT_KEY','')
+          raw_ticket,raw_agent=os.environ.get('TICKET_KEY',''),os.environ.get('AGENT_KEY','')
+          ticket,agent=raw_ticket.strip(),raw_agent.strip()
+          if (raw_ticket and not ticket) or (raw_agent and not agent):raise SystemExit('Terminal keys cannot contain only whitespace')
           if bool(ticket)!=bool(agent):raise SystemExit('Configure both terminal keys together, or neither for initial disabled bootstrap')
-          if ticket and (len(ticket)<32 or len(agent)<32 or ticket==agent):raise SystemExit('Terminal keys must be distinct and at least 32 characters')
+          if ticket and (len(ticket)<32 or len(agent)<32 or ticket==agent or any(c.isspace() for c in ticket+agent)):raise SystemExit('Terminal keys must be distinct and at least 32 characters')
           PY
       - name: Deploy relay
         env:
@@ -67,7 +70,7 @@ jobs:
           if [ -n "$TICKET_KEY" ]; then
             python3 - <<'PY' | node "$RUNNER_TEMP/terminal-deploy-cli/node_modules/wrangler/bin/wrangler.js" secret bulk --config terminal-relay/wrangler.toml
           import json,os
-          print(json.dumps({'TICKET_KEY':os.environ['TICKET_KEY'],'AGENT_KEY':os.environ['AGENT_KEY']}))
+          print(json.dumps({'TICKET_KEY':os.environ['TICKET_KEY'].strip(),'AGENT_KEY':os.environ['AGENT_KEY'].strip()}))
           PY
           else
             echo 'No terminal keys supplied; existing Worker secrets are preserved. Initial bootstrap remains inaccessible without keys.'

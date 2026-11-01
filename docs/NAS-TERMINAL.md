@@ -120,3 +120,7 @@ Source đã chuẩn bị; [PR #36](https://github.com/hunghvt-cyber/web-home/pul
 `nas-agent/prepare.py --relay-url wss://homepage-nas-terminal.thanhhunga4-wtf.workers.dev/connect` tạo config.json, agent-key.txt và ticket-key.txt dưới ~/.config/homepage-terminal (thư mục 0700, file 0600); không in khóa. Chạy lại giữ nguyên khóa, từ chối config/khóa mâu thuẫn, file đọc công khai hoặc symlink. Chạy prepare trước install.sh để tránh nhập key tương tác. Hai key file chỉ dùng điền vào secret stores, không commit hoặc gửi chat.
 
 GitHub Actions secrets: NAS_TERMINAL_AGENT_KEY lấy agent-key.txt; NAS_TERMINAL_TICKET_KEY lấy ticket-key.txt. Vercel project homepage-nas, chỉ Production, Secret NAS_TERMINAL_TICKET_KEY lấy cùng ticket-key.txt. Relay URL và flag false đã được chuẩn bị riêng; chỉ bật sau qualification. Không đưa khóa sang Preview.
+
+## Chuẩn hóa khóa clipboard
+
+Audit run 41308701573: cả hai GitHub keys length=44, edge whitespace=true, sau trim đúng định dạng URL-safe 43 ký tự do NAS tạo. Đây là nguyên nhân cụ thể phù hợp với agent HTTP 401. Deployment validator/bulk secret upload và Vercel ticket signer chuẩn hóa duy nhất whitespace đầu/cuối; không đổi phần khóa, không ghi giá trị. Khoảng trắng bên trong bị chặn. Workflow relay được gọi lại từ qualification trên main để đồng bộ rồi kiểm tra chỉ đọc; kết quả runtime mới phải được ghi riêng. Không cần chủ NAS tạo hoặc dán lại khóa.
