@@ -1,5 +1,12 @@
 # NAS Terminal — 01/11/2026
 
+## Relay bootstrap — 18:48 ngày 01/11/2026
+
+Sau khi chủ tài khoản sửa Account ID, attempt mới của [run 41302975431](https://github.com/hunghvt-cyber/web-home/actions/runs/41302975431) PASS. Worker `homepage-nas-terminal` đã upload/deploy, version `c2eec678-cf49-4c11-934a-9df7ce2241c3`; endpoint `https://homepage-nas-terminal.thanhhunga4-wtf.workers.dev`. Workflow không nhận hai terminal keys, nên chưa cấu hình quyền browser/agent và chưa kích hoạt Homepage Terminal. Không coi token có mặt ở attempt trước là đã xác minh; attempt này mới có bằng chứng API deploy Cloudflare thành công.
+
+HTTP probe từ môi trường kiểm tra trả 403, body `error code: 1010` cho root và /connect. Đây không phải bằng chứng các nhánh xác thực Worker trả đúng 401/403; cần kiểm từ NAS/runner trước kết luận end-to-end. Chưa cài agent lên NAS, chưa có shell remote hoặc số đo RAM/CPU thật. Workflow tạm vẫn đã gỡ; chỉ workflow manual còn trong main.
+
+
 ## Trạng thái triển khai 18:41 ngày 01/11/2026
 
 PR #36 đã merge tại `629329880bb151fd81882bf37214afff447c5d86`. Homepage deployment `dpl_CQn8xBbnxX47rfzwKafGoyFJ8gGr` READY; terminal chưa được kích hoạt. Bootstrap run [41302975431](https://github.com/hunghvt-cyber/web-home/actions/runs/41302975431) check PASS nhưng deploy dừng trước lệnh Cloudflare với `Invalid CLOUDFLARE_ACCOUNT_ID secret`. Token secret có mặt; chưa xác minh token bằng API. Không in giá trị secret. Cần sửa Account ID đúng 32 ký tự hex; chưa có relay/agent NAS thật hoặc số đo tài nguyên. Workflow bootstrap một lần đã được gỡ; workflow manual chính được giữ.
