@@ -41,6 +41,19 @@ Cần tài khoản Cloudflare Workers Free với SQLite Durable Objects. Có th�
 
 Triển khai Worker bằng Wrangler chính thức với `terminal-relay/wrangler.toml`; đặt hai Worker secrets qua secret store, không commit env. Chỉ bật quan sát nếu đã xác nhận không ghi body/header/token. Tự động log Worker đang tắt.
 
+## Triển khai từ GitHub Actions
+
+Workflow `NAS Terminal relay` chỉ chạy manual trên `main`; kiểm tra code trước khi job deploy được cấp credential. Không chạy trên pull_request hoặc tự chạy theo push. Source và CLI không tự thay homepage production hay cài NAS.
+
+Đặt hai repository Actions secrets tại Settings → Secrets and variables → Actions:
+
+- `CLOUDFLARE_API_TOKEN`: token theo mẫu Edit Cloudflare Workers, chỉ cho đúng tài khoản. Không dùng Global API Key.
+- `CLOUDFLARE_ACCOUNT_ID`: Account ID của tài khoản đó.
+
+Hai secret `NAS_TERMINAL_TICKET_KEY` và `NAS_TERMINAL_AGENT_KEY` cấu hình theo cặp khi kích hoạt. Thiếu cả hai thì workflow chỉ bootstrap relay, không tạo credential tạm hoặc tự mở quyền. Thiếu một trong hai thì fail trước deploy. Chúng phải khác nhau, mỗi key ≥32 ký tự. Ticket key phải trùng với Vercel; agent key phải trùng với config NAS. Không in, commit hay đưa key vào artifact.
+
+Sau khi workflow có trên main, chạy manual. Nó triển khai đúng Worker `homepage-nas-terminal` bằng Wrangler pin 4.156.0; không đổi plan hay cấu hình billing. Nếu chưa đăng ký hostname workers.dev thì chủ tài khoản hoàn tất lựa chọn hostname trên dashboard. Không tuyên bố đường truyền hoạt động từ kết quả deploy Worker đơn lẻ.
+
 ## Cài trên NAS
 
 Đọc source và checkout **đúng commit đã qua CI**, không chạy script remote qua pipe. NAS cần Python 3.11+, module venv, tmux, user systemd và quyền tạo thư mục dưới /vol1. Không thay recorder, retention, backup engine, tunnel hoặc dịch vụ có sẵn. Script chỉ tạo/cập nhật `homepage-terminal.service` của user.
