@@ -1,5 +1,10 @@
 # Vận hành Homepage — cửa vào hiện hành
 
+## NAS Terminal — candidate 01/11/2026
+
+[Thiết kế, triển khai và nghiệm thu](NAS-TERMINAL.md): PTY/tmux tối đa 3 phiên, relay WebSocket outbound riêng; mặc định tắt. Chưa triển khai relay/agent NAS và chưa có số đo runtime. Không thay report publisher hoặc dữ liệu hiện hành.
+
+
 ## Đổi lại tên repo backup — 31/10/2026
 
 Đã đối chiếu ID: Drive là `hunghvt-cyber/backup-drive` (1191594464); Photos là `hunghvt-cyber/backup-photos-` (1336978361, có dấu gạch cuối). Reader Backfill dùng tên Photos mới. Tên `backup-drive` chỉ còn được chấp nhận cho link snapshot Photos lịch sử, không cho current-run. Publisher GAS xác thực workflow và repository ID khi GitHub cung cấp; giữ wire link lịch sử để tương thích schema GAS đã triển khai. Không đổi lịch, media, profile hoặc manifest. Test/CI và production readback phải ghi riêng, không coi sửa reader là khôi phục engine Photos.
@@ -277,5 +282,6 @@ engine trong một đợt cập nhật tài liệu.
 Việc cần xác minh tiếp: (1) nguyên nhân hai workflow failure và báo cáo GAS đầu
 tiên của từng nguồn; (2) hướng xử lý guide overrides còn ở Blob; (3) backup định kỳ
 Notes cùng thủ tục khôi phục. Đây là backlog, không tự tạo lịch hay thay production.
+
 
 

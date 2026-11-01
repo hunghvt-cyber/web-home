@@ -1,0 +1,18 @@
+name = "homepage-nas-terminal"
+main = "worker.js"
+compatibility_date = "2026-07-30"
+workers_dev = true
+
+[vars]
+PORTAL_ORIGIN = "https://homepage-nas.vercel.app"
+
+[[durable_objects.bindings]]
+name = "TERMINALS"
+class_name = "TerminalRoom"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["TerminalRoom"]
+
+[observability]
+enabled = false
