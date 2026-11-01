@@ -153,6 +153,70 @@ class ScannerTests(unittest.TestCase):
         scanner.handle({'action':'resume','scanId':ident});scanner.thread.join(5)
         self.assertEqual(scanner.handle({'action':'status'})['scan']['state'],'complete')
 
+    def test_drive_folder_id_requires_exact_single_or_composite_id(self):
+        self.assertEqual(module.drive_folder_id('target'),('target',False))
+        self.assertEqual(module.drive_folder_id('target\tshortcut'),('target',True))
+        for value in (None,'',True,'target\t','\tshortcut','a\tb\tc','x/y','a\nb'):
+            with self.subTest(value=value),self.assertRaises(ValueError):module.drive_folder_id(value)
+
+    def test_shortcut_target_scanned_once_and_cycle_terminates(self):
+        self.fixture.write_text(json.dumps({'drive:':[
+            {'Name':'Alias','IsDir':True,'ID':'target\tshortcut'},
+            {'Name':'Alias2','IsDir':True,'ID':'target\tshortcut2'}],
+            'drive:@target':[
+                {'Name':'Loop','IsDir':True,'ID':'target\tloop'},
+                {'Name':'a','ID':'a','Size':10,'Hashes':{'MD5':'a'*32}},
+                {'Name':'b','ID':'b','Size':10,'Hashes':{'MD5':'a'*32}},
+                {'Name':'Child','IsDir':True,'ID':'child'}],
+            'drive:@child':[{'Name':'c','ID':'c','Size':10,'Hashes':{'MD5':'a'*32}}]}))
+        scan=self.start()
+        self.assertEqual((scan['state'],scan['files'],scan['foldersDone']),('complete',3,3))
+        group=self.scanner.handle({'action':'groups','scanId':scan['id']})['groups'][0]
+        self.assertEqual(group['copies'],3)
+        files=self.scanner.handle({'action':'files','scanId':scan['id'],'group':group['hash']})['files']
+        self.assertTrue(all(not f['cleanable'] for f in files))
+        self.scanner.cleanup_enabled=True
+        with self.assertRaisesRegex(ValueError,'lối tắt'):
+            self.scanner.handle({'action':'prepare_cleanup','scanId':scan['id'],'fileKeys':[files[0]['fileKey']]})
+        page=self.scanner.handle({'action':'browse','cloud':'gdrive'})
+        child=self.scanner.handle({'action':'browse','cloud':'gdrive','location':page['folders'][0]['location']})
+        self.assertEqual(child['path'],'Alias')
+        with self.scanner.connection() as db:
+            self.assertEqual(db.execute('SELECT read_only FROM locations WHERE handle=?',(child['location'],)).fetchone()[0],1)
+        self.scanner.handle({'action':'start','cloud':'gdrive','location':child['location'],'id':'8'*32});self.scanner.thread.join(5)
+        with self.scanner.connection() as db:
+            self.assertEqual(db.execute("SELECT read_only FROM queue WHERE scan=? AND folder='id:target'",('8'*32,)).fetchone()[0],1)
+
+    def test_upgrade_preserves_inventory_and_snapshots_old_queue_schema(self):
+        scan=self.start()
+        with self.scanner.connection() as db:
+            db.execute('ALTER TABLE queue DROP COLUMN read_only')
+            db.execute('ALTER TABLE locations DROP COLUMN read_only')
+        self.scanner=Scanner(self.root/'state',self.roots,str(self.fake))
+        restored=self.scanner.handle({'action':'status','scanId':scan['id']})['scan']
+        self.assertEqual((restored['state'],restored['files'],restored['foldersDone']),('complete',5,2))
+        snapshot=self.root/'state/inventory.before-shortcuts.sqlite3'
+        self.assertTrue(snapshot.exists());self.assertEqual(snapshot.stat().st_mode&0o777,0o600)
+
+    def test_truly_missing_directory_id_stays_incomplete(self):
+        self.fixture.write_text(json.dumps({'drive:':[{'Name':'Unresolved','IsDir':True}]}))
+        scan=self.start()
+        self.assertEqual(scan['state'],'failed');self.assertIn('Thiếu ID',scan['error'])
+        with self.assertRaises(ValueError):self.scanner.handle({'action':'groups','scanId':scan['id']})
+
+    def test_failed_directory_with_shortcut_resumes_without_rereading_completed_root(self):
+        ident='9'*32
+        with self.scanner.connection() as db:
+            db.execute('INSERT INTO scans VALUES(?,?,?,?,?,?,?,?,?)',(ident,'gdrive','','failed',1,1,json.dumps(self.roots['gdrive'],sort_keys=True),0,'old ID guard'))
+            db.execute('INSERT INTO queue(scan,folder,state,display_path,provider_id) VALUES(?,?,?,?,?)',(ident,'','done','',None))
+            db.execute('INSERT INTO queue(scan,folder,state,display_path,provider_id) VALUES(?,?,?,?,?)',(ident,'id:child-id','working','Child','child-id'))
+            db.execute('INSERT INTO files(scan,identity,folder,path,size,hash) VALUES(?,?,?,?,?,?)',(ident,'id:root-file','','root-file',1,None))
+        self.fixture.write_text(json.dumps({'drive:@child-id':[{'Name':'Alias','IsDir':True,'ID':'target\tshortcut'}],
+            'drive:@target':[{'Name':'file','ID':'file','Size':1}]}))
+        self.scanner.handle({'action':'resume','scanId':ident});self.scanner.thread.join(5)
+        scan=self.scanner.handle({'action':'status','scanId':ident})['scan']
+        self.assertEqual((scan['state'],scan['files'],scan['foldersDone']),('complete',2,3))
+
     def test_unknown_size_without_mime_is_counted_but_never_grouped_as_zero(self):
         h='a'*32
         self.fixture.write_text(json.dumps({'drive:':[

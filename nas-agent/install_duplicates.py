@@ -83,6 +83,7 @@ def main():
     print('DUPLICATES_INSTALL=PASS; clouds='+','.join(roots))
     print('SCANNER_VERSION=3; recoverable cleanup enabled; existing cloud configuration preserved.')
     print('METADATA_SIZE_FIX=enabled; unknown-size files are counted and excluded from cleanup.')
+    print('DRIVE_FOLDER_ID_FIX=enabled; directory shortcuts scanned once by target ID; alias descendants are scan-only.')
     print('No scan or cleanup started by installation. No cloud data changed. Keys preserved.')
 
 

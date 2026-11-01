@@ -34,6 +34,13 @@ class CleanupTests(unittest.TestCase):
     def test_retain_one_is_enforced_on_server(self):
         with self.assertRaises(CleanupError):self.plan(self.files)
         self.assertEqual(self.provider.calls,[])
+    def test_shortcut_alias_cannot_be_selected_or_used_as_only_keeper(self):
+        with self.s.connection() as db:
+            db.execute('INSERT INTO queue(scan,folder,state,display_path,provider_id,read_only) VALUES(?,?,?,?,?,?)',(self.scan['id'],'id:alias','done','Alias','alias',1))
+            db.execute('UPDATE files SET folder=? WHERE handle=?',('id:alias',self.files[0]['fileKey']))
+        with self.assertRaisesRegex(CleanupError,'lối tắt'):self.plan(self.files[:1])
+        with self.assertRaisesRegex(CleanupError,'giữ lại'):self.plan(self.files[1:])
+        self.assertEqual(self.provider.calls,[])
     def test_success_leaves_one_and_retry_is_read_only(self):
         ident=self.plan(self.files[:2]);value=self.apply(ident)
         self.assertEqual(value['state'],'complete');self.assertEqual(value['counts']['done'],2)
