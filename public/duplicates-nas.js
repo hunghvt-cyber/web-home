@@ -1,23 +1,24 @@
 (()=>{
   const $=id=>document.getElementById(id),uuid=()=>crypto.randomUUID().replaceAll('-','');
   const names={gdrive:'Google Drive',koofr:'Koofr'},states={running:'Đang quét',pausing:'Đang tạm dừng',paused:'Đã tạm dừng',interrupted:'Bị gián đoạn',failed:'Chưa hoàn tất',complete:'Đã quét xong'};
-  let ws=null,online=false,seq=0,scan=null,offset=0,groupScan=null,poll=null,renew=null,connecting=false,auth=false,epoch=0,pickerReady=false,selectedLocation=null,browsed=null,pickerBusy=false,pickerEpoch=0,cleanupEnabled=false,canClean=false,cleaning=false,jobPlan=null;
+  let ws=null,online=false,seq=0,scan=null,offset=0,groupScan=null,poll=null,renew=null,connecting=false,auth=false,epoch=0,pickerReady=false,selectedLocation=null,browsed=null,pickerBusy=false,pickerEpoch=0,cleanupEnabled=false,canClean=false,cleaning=false,jobPlan=null,actionBusy=false;
   const selectedFiles=new Map();
   const pending=new Map();
   const message=text=>{$('nas-scan-message').textContent=text;};
   const bytes=n=>new Intl.NumberFormat('vi-VN',{maximumFractionDigits:2}).format(n/1024/1024)+' MiB';
   function controls(){
     const ready=auth&&online&&ws?.readyState===WebSocket.OPEN;
-    $('nas-scan-connect').disabled=!auth||connecting||!!ws;
+    $('nas-scan-connect').disabled=!auth||connecting||online;
+    $('nas-scan-connect').textContent=online?'NAS đã kết nối':connecting?'Đang kết nối…':'Kết nối NAS';
     for(const id of ['nas-scan-cloud','nas-scan-refresh'])$(id).disabled=!ready;
-    $('nas-scan-start').disabled=!ready||cleaning||!selectedLocation||['running','pausing'].includes(scan?.state);
     $('nas-folder-open').disabled=!ready||!pickerReady;
     for(const id of ['nas-folder-root','nas-folder-reload','nas-folder-more'])$(id).disabled=!ready||pickerBusy;
     $('nas-folder-up').disabled=!ready||pickerBusy||!browsed?.parent;
     for(const button of document.querySelectorAll('.cloud-folder'))button.disabled=!ready||pickerBusy;
-    $('nas-folder-choose').disabled=!ready||pickerBusy||!browsed||['running','pausing'].includes(scan?.state);
-    $('nas-scan-pause').disabled=!ready||scan?.state!=='running';
-    $('nas-scan-resume').disabled=!ready||cleaning||!['paused','failed','interrupted'].includes(scan?.state);
+    $('nas-folder-choose').disabled=!ready||actionBusy||cleaning||pickerBusy||!browsed||['running','pausing'].includes(scan?.state);
+    $('nas-scan-pause').disabled=!ready||actionBusy||scan?.state!=='running';
+    $('nas-scan-resume').disabled=!ready||actionBusy||cleaning||!['paused','failed','interrupted'].includes(scan?.state);
+    $('nas-scan-resume').textContent=scan?.state==='running'?'Đang quét nền':'Tiếp tục';
     $('nas-cleanup-panel').hidden=!cleanupEnabled;
     $('nas-cleanup-selection').textContent=selectedFiles.size?'Đã chọn '+selectedFiles.size+' file. Giữ lại các bản không chọn.'+(!canClean?' Mở quyền dọn file ở trên để tiếp tục.':''):'Chưa chọn file; không có file nào được chọn sẵn.';
     $('nas-cleanup-apply').disabled=!ready||!canClean||!cleanupEnabled||cleaning||!selectedFiles.size;
@@ -98,7 +99,7 @@
             for(const option of $('nas-scan-cloud').options)option.disabled=!roots.clouds.includes(option.value);
             if(!roots.clouds.includes($('nas-scan-cloud').value))$('nas-scan-cloud').value=roots.clouds[0]||'';
             if(!pickerReady){message('Cần cập nhật bộ quét trên NAS để chọn thư mục.');controls();return;}
-            await refresh();clearInterval(poll);poll=setInterval(async()=>{if(online&&pending.size===0){await refresh();if(jobPlan)await cleanupStatus();}},5000);if(jobPlan)await cleanupStatus();
+            await refresh();clearInterval(poll);poll=setInterval(async()=>{if(online&&!actionBusy&&pending.size===0){await refresh();if(jobPlan)await cleanupStatus();}},5000);if(jobPlan)await cleanupStatus();
           }catch(error){message(error.message);}
         }else if(value.type==='offline'){stop();message('NAS mất kết nối; bấm Kết nối NAS để kiểm tra lại.');}
         else if(value.type==='audit'||value.type==='error'){
@@ -112,13 +113,12 @@
       socket.onclose=()=>{if(ws===socket){stop();message('Kết nối đã đóng. Lượt quét trên NAS vẫn được giữ.');}};
     }catch(error){message(error.message);}finally{connecting=false;controls();}
   }
-  $('nas-scan-connect').onclick=connect;
+  $('nas-scan-connect').onclick=()=>{if(ws&&!online)stop();connect();};
   $('nas-scan-refresh').onclick=()=>{epoch++;clearGroups();refresh(true);};
   async function startScan(){
-    if(!selectedLocation)return;const selected={...selectedLocation};$('nas-scan-start').disabled=true;epoch++;clearGroups();
-    try{await render(await request('start',{cloud:selected.cloud,location:selected.location}));}catch(error){message(error.message);}finally{controls();}
+    if(!selectedLocation||actionBusy)return;const selected={...selectedLocation};actionBusy=true;controls();epoch++;clearGroups();$('nas-scan-action').textContent='Đang gửi yêu cầu quét…';
+    try{await render(await request('start',{cloud:selected.cloud,location:selected.location}));$('nas-scan-action').textContent='Đã nhận yêu cầu quét.';}catch(error){$('nas-scan-action').textContent=error.message;}finally{actionBusy=false;controls();}
   }
-  $('nas-scan-form').onsubmit=async event=>{event.preventDefault();await startScan();};
   async function browse(location,more=false){
     if(!online||!pickerReady)return;
     const cloud=$('nas-scan-cloud').value,stamp=++pickerEpoch;
@@ -156,7 +156,22 @@
     $('nas-scan-scope').textContent='Chưa chọn thư mục.';$('nas-folder-list').replaceChildren();
     if(!$('nas-folder-picker').hidden)browse();controls();
   });
-  for(const action of ['pause','resume'])$('nas-scan-'+action).onclick=async()=>{if(!scan)return;try{await render(await request(action,{scanId:scan.id}));}catch(error){message(error.message);}};
+  for(const action of ['pause','resume'])$('nas-scan-'+action).onclick=async()=>{
+    if(!scan||actionBusy)return;const ident=scan.id;actionBusy=true;controls();
+    $('nas-scan-action').textContent=action==='resume'?'Đang kiểm tra lượt quét…':'Đang yêu cầu tạm dừng…';
+    try{
+      if(action==='resume'){
+        const current=await request('status',{scanId:ident});await render(current);
+        if(['running','pausing','complete'].includes(current.scan?.state)){
+          $('nas-scan-action').textContent=current.scan.state==='running'?'Lượt quét vẫn đang chạy nền; đã nối lại trạng thái.':current.scan.state==='complete'?'Lượt quét đã hoàn tất.':'Đang tạm dừng; chờ vài giây rồi bấm Tiếp tục.';
+          return;
+        }
+      }
+      await render(await request(action,{scanId:ident}));
+      $('nas-scan-action').textContent=action==='resume'?'Đã tiếp tục lượt quét cũ.':'Đã nhận yêu cầu tạm dừng.';
+    }catch(error){$('nas-scan-action').textContent=error.message;}
+    finally{actionBusy=false;controls();}
+  };
   $('nas-scan-more').onclick=async()=>{const button=$('nas-scan-more');button.disabled=true;try{await groupPage();}catch(error){message(error.message);}finally{button.disabled=false;}};
   async function cleanupStatus(){
     if(!jobPlan)return;
@@ -189,8 +204,8 @@
   };
   window.addEventListener('account-change',event=>{
     auth=event.detail.authenticated;$('nas-scan-workspace').hidden=!auth;
-    if(!auth){epoch++;stop();scan=null;selectedLocation=null;canClean=false;cleanupEnabled=false;jobPlan=null;cleaning=false;$('nas-cleanup-status').textContent='';$('nas-cleanup-password').value='';browsed=null;pickerReady=false;clearGroups();$('nas-folder-picker').hidden=true;$('nas-folder-list').replaceChildren();$('nas-scan-scope').textContent='Chưa chọn thư mục.';$('nas-scan-progress').textContent='';message('Mở khóa Homepage để kết nối NAS.');}
-    else{if(!ws)message('Bấm Kết nối NAS. Bộ quét cần được cài trên NAS trước.');controls();}
+    if(!auth){epoch++;stop();scan=null;selectedLocation=null;actionBusy=false;$('nas-scan-action').textContent='';canClean=false;cleanupEnabled=false;jobPlan=null;cleaning=false;$('nas-cleanup-status').textContent='';$('nas-cleanup-password').value='';browsed=null;pickerReady=false;clearGroups();$('nas-folder-picker').hidden=true;$('nas-folder-list').replaceChildren();$('nas-scan-scope').textContent='Chưa chọn thư mục.';$('nas-scan-progress').textContent='';message('Mở khóa Homepage để kết nối NAS.');}
+    else{if(!ws&&!connecting){message('Đang nối lại NAS và lượt quét gần nhất…');connect();}controls();}
   });
   window.addEventListener('pagehide',stop);controls();
 })();

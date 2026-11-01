@@ -153,3 +153,17 @@ retain-one, changed keeper, unknown outcomes, plan replay, restart, protected na
 conditional exact-ID Drive trash and Koofr destination conflict handling. No real cloud
 file has been removed or moved in the authoring session; v3 host activation and live
 cleanup qualification remain pending owner-selected files.
+
+## Reload/resume UI fix — 02/11/2026
+
+Authenticated tool pages now automatically reconnect to the NAS and restore its latest
+scan, without starting or resuming a job on page load. Resume rechecks the same scan ID:
+running/complete jobs are displayed as-is; paused/interrupted/failed jobs receive an
+explicit resume command. Operation errors remain in a separate status field so normal
+five-second polling cannot hide them. Action buttons lock while awaiting a reply.
+
+The duplicate Start scan button/form submission is removed; only the folder picker's
+“Quét thư mục này” starts a scan. Manual reconnect is available when the NAS socket is
+offline. This update changes only web UI; no NAS agent reinstall is needed. Regression
+fixtures simulate new tabs with paused/running jobs and a resume error surviving polling.
+These checks do not identify every possible host/provider failure without runtime output.
