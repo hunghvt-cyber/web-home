@@ -11,7 +11,7 @@
 <body><main class="duplicates-page">
   <header><a href="/">← Trang chủ</a><span class="badge">CÔNG CỤ CLOUD</span><h1>Dọn file trùng</h1><p>Tìm các bản có cùng nội dung trong từng cloud.</p></header>
   <div class="account noprint"><span id="account-state">Đang kiểm tra…</span> · <a href="/#portal-account" target="_blank" rel="noopener">Mở khóa tại Homepage</a><p id="account-message" role="status"></p></div>
-  <section><div class="bar"><h2>Quét nền trên NAS</h2><span class="badge">Chỉ đọc</span></div><div class="body">
+  <section><div class="bar"><h2>Quét nền trên NAS</h2><span class="badge">Quét &amp; dọn</span></div><div class="body">
     <p id="nas-scan-message" role="status" aria-live="polite">Mở khóa Homepage để kết nối NAS.</p>
     <div id="nas-scan-workspace" hidden>
       <button id="nas-scan-connect" type="button">Kết nối NAS</button>
@@ -29,8 +29,14 @@
       </form>
       <div class="scan-actions"><button id="nas-scan-refresh" type="button" disabled>Lượt gần nhất</button><button id="nas-scan-pause" type="button" disabled>Tạm dừng</button><button id="nas-scan-resume" type="button" disabled>Tiếp tục</button></div>
       <p id="nas-scan-progress" role="status"></p>
-      <p class="muted">Đóng trang vẫn quét tiếp. NAS khởi động lại sẽ giữ checkpoint và chờ bấm Tiếp tục. Chỉ đọc danh sách và checksum, không tải nội dung, không xóa file.</p>
-      <div id="nas-scan-results" hidden><h3>Nhóm trùng</h3><p class="muted">Mỗi nhóm giữ một bản thì dung lượng dư được ước tính như bên dưới. Chưa có chức năng xóa.</p><div id="nas-scan-groups"></div><button id="nas-scan-more" type="button" hidden>Xem thêm nhóm</button></div>
+      <p class="muted">Đóng trang vẫn quét tiếp. NAS khởi động lại sẽ giữ checkpoint và chờ bấm Tiếp tục. Quét chỉ đọc metadata và checksum. Dọn file cần chọn file, mở quyền và xác nhận.</p>
+      <div id="nas-scan-results" hidden><h3>Nhóm trùng</h3><p class="muted">Chọn bản cần dọn; phải giữ ít nhất một bản mỗi nhóm. Dung lượng dưới đây là ước tính bản dư.</p>
+      <div id="nas-cleanup-panel" hidden>
+        <details><summary>Mở quyền dọn file</summary><form id="nas-cleanup-unlock"><label for="nas-cleanup-password">Nhập lại mật khẩu Homepage</label><input id="nas-cleanup-password" type="password" autocomplete="current-password" maxlength="256" required><button type="submit">Mở quyền trong 15 phút</button></form></details>
+        <p id="nas-cleanup-selection">Chưa chọn file.</p><button id="nas-cleanup-apply" type="button" disabled>Dọn file đã chọn</button>
+        <p id="nas-cleanup-status" role="status" aria-live="polite"></p>
+        <p class="muted">Drive: đưa vào Thùng rác. Koofr: chuyển vào GoogleBackup-Trash, chưa giảm dung lượng. Mỗi lượt tối đa 20 file. Thư mục đang đồng bộ có thể truyền thay đổi sang nơi khác.</p>
+      </div><div id="nas-scan-groups"></div><button id="nas-scan-more" type="button" hidden>Xem thêm nhóm</button></div>
     </div>
   </div></section>
   <details><summary>Đọc danh sách JSON có sẵn</summary>
@@ -49,10 +55,10 @@
   </div></section>
   </details>
   <section id="duplicate-results" hidden><div class="bar"><h2>Kết quả rà soát</h2></div><div class="body">
-    <p id="duplicate-summary"></p><p class="muted">Dung lượng dư là ước tính nếu giữ một bản mỗi nhóm. Chưa di chuyển hoặc xóa file nào.</p>
+    <p id="duplicate-summary"></p><p class="muted">Dung lượng dư là ước tính nếu giữ một bản mỗi nhóm. Phân tích JSON không thực hiện dọn file.</p>
     <div id="duplicate-groups"></div><button id="duplicate-more" type="button" hidden>Xem thêm nhóm</button>
   </div></section>
-  <details><summary>Cách lấy danh sách file</summary><div class="body"><p>Workflow “Read-only duplicate audit” trong repo backup-drive xuất các file drive.json, koofr.json và trash.json. Chọn đúng cloud tương ứng; mỗi file được phân tích riêng.</p><p>Hoặc dùng script scripts/duplicate_inventory.py trong repo web-home trên máy đã cấu hình rclone. Script chỉ liệt kê metadata và checksum, không tải nội dung hoặc xóa file.</p><p>Bước dọn có chọn sẽ được bổ sung sau: kiểm tra lại nội dung và bắt buộc giữ ít nhất một bản mỗi nhóm.</p></div></details>
+  <details><summary>Cách lấy danh sách file</summary><div class="body"><p>Workflow “Read-only duplicate audit” trong repo backup-drive xuất các file drive.json, koofr.json và trash.json. Chọn đúng cloud tương ứng; mỗi file được phân tích riêng.</p><p>Hoặc dùng script scripts/duplicate_inventory.py trong repo web-home trên máy đã cấu hình rclone. Script chỉ liệt kê metadata và checksum, không tải nội dung hoặc xóa file.</p><p>Dọn file trực tiếp dùng mục Quét nền trên NAS. Danh sách JSON cục bộ chỉ để xem.</p></div></details>
   <footer>Homepage · Google Drive và Koofr được rà soát riêng.</footer>
 </main><script src="/account.js" defer></script><script src="/duplicates-nas.js" defer></script><script type="module" src="/duplicates.js"></script></body>
 </html>

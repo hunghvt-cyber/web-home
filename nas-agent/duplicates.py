@@ -12,6 +12,7 @@ import threading
 import time
 import uuid
 from contextlib import contextmanager
+from cloud_cleanup import CleanupMixin, protected
 
 ID = re.compile(r'^[a-f0-9]{32}$')
 
@@ -61,8 +62,9 @@ def array_items(stream):
             return
 
 
-class Scanner:
-    def __init__(self, directory, roots, rclone='rclone', require_mount=False):
+class Scanner(CleanupMixin):
+    def __init__(self, directory, roots, rclone='rclone', require_mount=False, cleanup_enabled=False):
+        self.cleanup_enabled = cleanup_enabled
         self.require_mount = require_mount
         if self.require_mount and not os.path.ismount('/vol1'): raise ValueError('/vol1 is not mounted')
         self.directory = Path(directory)
@@ -116,6 +118,7 @@ class Scanner:
                 db.execute('ALTER TABLE queue ADD COLUMN display_path TEXT')
                 db.execute('ALTER TABLE queue ADD COLUMN provider_id TEXT')
                 db.execute('UPDATE queue SET display_path=folder')
+            self.setup_cleanup(db)
             db.execute("UPDATE scans SET state='interrupted',updated=? WHERE state IN ('running','pausing')", (time.time(),))
             db.execute("UPDATE queue SET state='pending' WHERE state='working'")
         self.db.chmod(0o600)
@@ -142,11 +145,12 @@ class Scanner:
         return row
 
     def handle(self, command):
+        if command.get('action') in ('prepare_cleanup','apply_cleanup','cleanup_status'): return self.cleanup_handle(command)
         if command.get('action') == 'browse': return self.browse(command)
         with self.guard, self.connection() as db:
             action, ident = command.get('action'), command.get('scanId')
             if action == 'roots':
-                return {'clouds': [name for name in ('gdrive', 'koofr') if name in self.roots], 'version': 2}
+                return {'clouds': [name for name in ('gdrive', 'koofr') if name in self.roots], 'version': 3, 'cleanupEnabled': self.cleanup_enabled}
             if action == 'start':
                 cloud, path = command.get('cloud'), scope(command.get('path', ''))
                 if cloud not in self.roots: raise ValueError('Cloud chưa được cấu hình trên NAS.')
@@ -195,13 +199,18 @@ class Scanner:
             # Partial scans remain progress only; never present incomplete groups as final results.
             if row['state'] != 'complete': raise ValueError('Chờ quét hoàn tất để xem nhóm trùng.')
             if action == 'groups':
-                rows = db.execute('SELECT hash,MAX(size) size,COUNT(*) copies FROM files WHERE scan=? AND hash IS NOT NULL GROUP BY hash HAVING COUNT(*)>1 ORDER BY MAX(size)*(COUNT(*)-1) DESC,hash LIMIT 21 OFFSET ?', (ident, offset)).fetchall()
+                rows = db.execute('SELECT hash,MAX(size) size,COUNT(*) copies FROM files WHERE scan=? AND hash IS NOT NULL AND removed=0 GROUP BY hash HAVING COUNT(*)>1 ORDER BY MAX(size)*(COUNT(*)-1) DESC,hash LIMIT 21 OFFSET ?', (ident, offset)).fetchall()
                 return {'groups': [dict(r) for r in rows[:20]], 'nextOffset': offset + 20 if len(rows) > 20 else None}
             if action == 'files':
                 key = command.get('group')
                 if not isinstance(key, str) or len(key) > 100: raise ValueError('Nhóm không hợp lệ.')
-                rows = db.execute('SELECT path FROM files WHERE scan=? AND hash=? ORDER BY path,identity LIMIT 6 OFFSET ?', (ident, key, offset)).fetchall()
-                return {'files': [dict(r) for r in rows[:5]], 'nextOffset': offset + 5 if len(rows) > 5 else None}
+                rows = db.execute('SELECT identity,path,handle FROM files WHERE scan=? AND hash=? AND removed=0 ORDER BY path,identity LIMIT 6 OFFSET ?', (ident, key, offset)).fetchall()
+                result=[]
+                for row in rows[:5]:
+                    handle=row['handle'] or uuid.uuid4().hex
+                    if not row['handle']:db.execute('UPDATE files SET handle=? WHERE scan=? AND identity=?',(handle,ident,row['identity']))
+                    result.append({'path':row['path'],'fileKey':handle,'cleanable':not protected(row['path'])})
+                return {'files': result, 'nextOffset': offset + 5 if len(rows) > 5 else None}
             raise ValueError('Thao tác không hỗ trợ.')
 
     def location(self, db, cloud, handle):
@@ -286,15 +295,17 @@ class Scanner:
         done = db.execute("SELECT COUNT(*) FROM queue WHERE scan=? AND state='done'", (ident,)).fetchone()[0]
         total = db.execute('SELECT COUNT(*) FROM queue WHERE scan=?', (ident,)).fetchone()[0]
         files = db.execute('SELECT COUNT(*),COUNT(*)-COUNT(hash) FROM files WHERE scan=?', (ident,)).fetchone()
+        cleanup=db.execute('SELECT id FROM cleanup_plans WHERE scan=? ORDER BY created DESC LIMIT 1',(ident,)).fetchone()
         return {'scan': {'id': row['id'], 'cloud': row['cloud'], 'path': row['root'], 'state': row['state'],
                          'createdAt': row['created'], 'updatedAt': row['updated'], 'files': files[0],
-                         'unhashed': files[1], 'foldersDone': done, 'foldersDiscovered': total, 'error': row['error']}}
+                         'unhashed': files[1], 'foldersDone': done, 'foldersDiscovered': total, 'error': row['error'], 'lastCleanup':cleanup['id'] if cleanup else None}}
 
     def launch(self, ident):
         self.thread = threading.Thread(target=self.work, args=(ident,), daemon=True)
         self.thread.start()
 
     def shutdown(self):
+        self.stopping.set()
         # Kill only our metadata subprocess, preserving tmux shell sessions on agent restart.
         with self.guard, self.connection() as db:
             rows = db.execute("SELECT id FROM scans WHERE state IN ('running','pausing')").fetchall()
@@ -362,7 +373,7 @@ class Scanner:
                                     if digest:
                                         key = str(size) + ':' + algorithm + ':' + digest.lower(); break
                                 identity = 'id:' + str(item['ID']) if item.get('ID') else 'path:' + path
-                                db.execute('INSERT OR REPLACE INTO files VALUES(?,?,?,?,?,?)', (ident, identity, node, path, size, key))
+                                db.execute('INSERT OR REPLACE INTO files(scan,identity,folder,path,size,hash) VALUES(?,?,?,?,?,?)', (ident, identity, node, path, size, key))
                                 db.execute('UPDATE scans SET updated=? WHERE id=?', (time.time(), ident))
                     code = process.wait(timeout=10)
                     with self.guard, self.connection() as db:
@@ -398,4 +409,4 @@ def load_scanner(config_path):
         raise ValueError('Scanner state must be on mounted /vol1')
     if not directory.resolve().is_relative_to(Path('/vol1').resolve()):
         raise ValueError('Scanner state resolves outside HDD')
-    return Scanner(directory, config['roots'], rclone=config.get('rclone_path', 'rclone'), require_mount=True)
+    return Scanner(directory, config['roots'], rclone=config.get('rclone_path', 'rclone'), require_mount=True, cleanup_enabled=config.get('cleanup_enabled') is True)
