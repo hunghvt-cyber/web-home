@@ -6,11 +6,7 @@ on:
 permissions:
   contents: read
 jobs:
-  deploy:
-    uses: ./.github/workflows/nas-terminal-relay.yml
-    secrets: inherit
   verify:
-    needs: deploy
     runs-on: ubuntu-latest
     timeout-minutes: 4
     steps:
@@ -67,7 +63,40 @@ jobs:
                           print('READONLY_SESSION_LIST=PASS count='+str(count),flush=True)
                           break
                       if result.get('type')=='error':raise RuntimeError('NAS rejected read-only list')
-              print('No shell input, PTY creation or session termination was requested.',flush=True)
+                  if count>=3:raise RuntimeError('No free session for temporary qualification')
+                  sid=secrets.token_hex(16)
+                  nonce=secrets.token_hex(8)
+                  marker=('NAS_TERM_'+nonce).encode()
+                  try:
+                      await ws.send(json.dumps({'type':'command','command':{'op':'create','id':sid,'seq':2,'cols':80,'rows':24}}))
+                      deadline=time.monotonic()+20
+                      while True:
+                          event=json.loads(await asyncio.wait_for(ws.recv(),max(1,deadline-time.monotonic())))
+                          if event.get('type')=='attached' and event.get('id')==sid:break
+                          if event.get('type')=='error':raise RuntimeError('Temporary PTY creation failed')
+                          if time.monotonic()>deadline:raise RuntimeError('PTY attach timeout')
+                      data='printf "NAS_%s\\n" "TERM_'+nonce+'"\r'
+                      await ws.send(json.dumps({'type':'command','command':{'op':'input','id':sid,'seq':3,'data':data}}))
+                      output=b''
+                      deadline=time.monotonic()+20
+                      while marker not in output:
+                          event=json.loads(await asyncio.wait_for(ws.recv(),max(1,deadline-time.monotonic())))
+                          if event.get('type')=='output' and event.get('id')==sid:
+                              output=(output+base64.b64decode(event['data']))[-65536:]
+                          if event.get('type')=='error':raise RuntimeError('Temporary PTY input failed')
+                          if time.monotonic()>deadline:raise RuntimeError('PTY output timeout')
+                      print('NAS_PTY_INPUT_OUTPUT=PASS',flush=True)
+                  finally:
+                      await ws.send(json.dumps({'type':'command','command':{'op':'terminate','id':sid,'seq':4}}))
+                      deadline=time.monotonic()+15
+                      while True:
+                          event=json.loads(await asyncio.wait_for(ws.recv(),max(1,deadline-time.monotonic())))
+                          if event.get('type')=='terminated' and event.get('id')==sid:
+                              print('TEMPORARY_SESSION_CLOSED=PASS',flush=True)
+                              break
+                          if event.get('type')=='error' and event.get('seq')==4:raise RuntimeError('Temporary session cleanup not confirmed')
+                          if time.monotonic()>deadline:raise RuntimeError('Temporary session cleanup timeout')
+              print('Only a temporary owned PTY and printf challenge were used; no other sessions were modified.',flush=True)
           try:asyncio.run(main())
           except Exception as e:
               print('QUALIFICATION=FAIL type='+type(e).__name__,flush=True)
