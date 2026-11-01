@@ -12,6 +12,20 @@ jobs:
     steps:
       - name: Install verifier dependency without credentials
         run: python3 -m pip install --target "$RUNNER_TEMP/terminal-verify-deps" --disable-pip-version-check websockets==15.0.1
+      - name: Audit credential format without printing keys
+        env:
+          AGENT_KEY: ${{ secrets.NAS_TERMINAL_AGENT_KEY }}
+          TICKET_KEY: ${{ secrets.NAS_TERMINAL_TICKET_KEY }}
+        run: |
+          python3 - <<'PY'
+          import os,re
+          for name in ("AGENT_KEY","TICKET_KEY"):
+              value=os.environ.get(name,"")
+              clean=value.strip()
+              print(name+"_LENGTH="+str(len(value)))
+              print(name+"_EDGE_WHITESPACE="+str(value!=clean))
+              print(name+"_URLSAFE_FORMAT="+str(bool(re.fullmatch(r"[A-Za-z0-9_-]{43}",clean))))
+          PY
       - name: Verify real relay and NAS using read-only list
         env:
           TICKET_KEY: ${{ secrets.NAS_TERMINAL_TICKET_KEY }}
