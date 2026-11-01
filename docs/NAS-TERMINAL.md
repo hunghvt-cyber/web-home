@@ -24,7 +24,7 @@ Các nút: mở/chuyển phiên, làm mới danh sách, copy buffer, vùng dán 
 
 ## Cấu hình triển khai
 
-Chưa bật tự động ở production. API fail closed nếu không có `NAS_TERMINAL_ENABLED=true` và cấu hình hợp lệ.
+Endpoint là `POST /api/auth?service=terminal`, dùng chung function auth để giữ giới hạn 12 functions của Vercel Hobby. Chưa bật tự động ở production. API fail closed nếu không có `NAS_TERMINAL_ENABLED=true` và cấu hình hợp lệ.
 
 | Nơi | Tên | Nội dung |
 | --- | --- | --- |
@@ -79,4 +79,4 @@ copyout 'systemctl --user disable --now homepage-terminal.service'
 
 ## Trạng thái
 
-Source đã chuẩn bị; xem biên bản trong PR. Chưa có bằng chứng relay production hoặc agent trên NAS. Không coi UI render, CI xanh hay deployment READY là chứng minh điều khiển NAS thành công.
+Source đã chuẩn bị; [PR #36](https://github.com/hunghvt-cyber/web-home/pull/36). CI đầu [41284459402](https://github.com/hunghvt-cyber/web-home/actions/runs/41284459402) trên code 377edf3 đạt 114/114 Node và 5/5 Python, gồm PTY/tmux thật trên GitHub runner; không phải NAS thật. Bản tiếp theo ghép API vào function auth để giữ Hobby và bổ sung kiểm tra 3 phiên/Ctrl+C. Chưa có bằng chứng relay production hoặc agent trên NAS. Không coi UI render, CI xanh hay deployment READY là chứng minh điều khiển NAS thành công.

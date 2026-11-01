@@ -152,9 +152,6 @@
     },
     "api/auth.js": {
       "maxDuration": 60
-    },
-    "api/nas-terminal.js": {
-      "maxDuration": 60
     }
   }
 }

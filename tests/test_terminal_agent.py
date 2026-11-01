@@ -61,11 +61,26 @@ class RealTmuxTests(unittest.IsolatedAsyncioTestCase):
                 if any(e.get('type')=='output' and b'TERMINAL_QUALIFIED' in m.base64.b64decode(e['data']) for e in self.events):break
                 await asyncio.sleep(.05)
             self.assertTrue(any(e.get('type')=='output' and b'TERMINAL_QUALIFIED' in m.base64.b64decode(e['data']) for e in self.events))
+            await cmd('create',3,id='c'*32,cols=80,rows=24)
+            await cmd('create',4,id='d'*32,cols=80,rows=24)
+            await cmd('create',5,id='e'*32,cols=80,rows=24)
+            self.assertEqual(len(a.sessions()),3)
+            self.assertEqual(self.events[-1]['type'],'error')
             await a.close()
             self.assertIn(ident,a.sessions())
-            await cmd('attach',3,cols=100,rows=30)
-            await cmd('terminate',4)
+            await cmd('attach',6,cols=100,rows=30)
+            await cmd('input',7,data='sleep 30\r')
+            await asyncio.sleep(.05)
+            await cmd('input',8,data='\x03')
+            await cmd('input',9,data="printf 'AFTER_%s\\n' INTERRUPT\r")
+            for _ in range(50):
+                output=b''.join(m.base64.b64decode(e['data']) for e in self.events if e.get('type')=='output' and e.get('id')==ident)
+                if b'AFTER_INTERRUPT' in output:break
+                await asyncio.sleep(.05)
+            self.assertIn(b'AFTER_INTERRUPT',output)
+            await cmd('terminate',10)
             self.assertNotIn(ident,a.sessions())
+            self.assertEqual(len(a.sessions()),2)
         finally:
             await a.close()
             a.run('kill-server',check=False)

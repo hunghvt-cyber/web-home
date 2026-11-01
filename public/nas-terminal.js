@@ -1,5 +1,5 @@
 (()=>{
- const $=id=>document.getElementById(id),api=(value)=>window.PortalAccount.api('/api/nas-terminal',value);
+ const $=id=>document.getElementById(id),api=(value)=>window.PortalAccount.api('/api/auth?service=terminal',value);
  const uuid=()=>crypto.randomUUID().replaceAll('-','');
  let ws=null,online=false,seq=0,selected=null,ids=[],term=null,fit=null,attached=false,connecting=false,authGeneration=0,renewTimer=null;
  const pending=new Set();

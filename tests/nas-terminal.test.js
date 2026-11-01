@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {ticket,terminalConfig} from '../lib/terminal-ticket.js';
 import {verifyTicket,TerminalRoom} from '../terminal-relay/worker.js';
 import {command} from '../lib/terminal-protocol.js';
-import {createTerminalHandler} from '../api/nas-terminal.js';
+import {createTerminalHandler} from '../lib/terminal-api.js';
 const key='test-key-only-'.repeat(4),id='a'.repeat(32);
 const cfg={url:'wss://relay.example/connect',key};
 test('ticket verifies exact audience, expiration and signature',async()=>{
