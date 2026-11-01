@@ -1,5 +1,12 @@
 # NAS Terminal — 01/11/2026
 
+## Kết nối sau khi cài agent — 19:40 ngày 01/11/2026
+
+Chủ NAS cung cấp KEY_PREPARE=PASS, pip websockets 15.0.1 aarch64 thành công và user service active. Đây chưa phải bằng chứng agent online. GitHub deploy retry job 124850203977 PASS, đã tạo Worker secrets TICKET_KEY và AGENT_KEY. Vercel metadata xác nhận NAS_TERMINAL_TICKET_KEY kiểu sensitive, chỉ Production; NAS_TERMINAL_ENABLED vẫn false.
+
+Run [41307472573](https://github.com/hunghvt-cyber/web-home/actions/runs/41307472573), job 124850709608: BROWSER_TICKET_AUTH=PASS nhưng NAS_AGENT=WAITING và timeout sau 90 giây; chưa nhận được danh sách phiên. Chưa gửi shell input, tạo PTY hoặc kết thúc session. Cần diagnostic TLS/HTTP handshake và user service trên NAS; không tự kết luận key mismatch hoặc thay khóa. Workflow qualification tạm được giữ trong khi xử lý để retry đúng bài kiểm tra; phải gỡ khi nghiệm thu hoàn tất. Chưa bật terminal production.
+
+
 ## Relay bootstrap — 18:48 ngày 01/11/2026
 
 Sau khi chủ tài khoản sửa Account ID, attempt mới của [run 41302975431](https://github.com/hunghvt-cyber/web-home/actions/runs/41302975431) PASS. Worker `homepage-nas-terminal` đã upload/deploy, version `c2eec678-cf49-4c11-934a-9df7ce2241c3`; endpoint `https://homepage-nas-terminal.thanhhunga4-wtf.workers.dev`. Workflow không nhận hai terminal keys, nên chưa cấu hình quyền browser/agent và chưa kích hoạt Homepage Terminal. Không coi token có mặt ở attempt trước là đã xác minh; attempt này mới có bằng chứng API deploy Cloudflare thành công.
