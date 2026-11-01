@@ -262,6 +262,39 @@
       "repository_id": 1336978361,
       "historical_report_repository_alias": "hunghvt-cyber/google-photos-koofr",
       "rename_repair_document": "docs/BACKFILL-RENAME-20261029.md"
+    },
+    {
+      "id": "nas-terminal",
+      "state": "production_enabled_runtime_verified_20261101",
+      "documentation": "docs/NAS-TERMINAL.md",
+      "source_repository": "hunghvt-cyber/web-home",
+      "url": "https://homepage-nas.vercel.app/nas/terminal/",
+      "transport": "outbound-wss-cloudflare-pty-tmux",
+      "api": "POST /api/auth?service=terminal",
+      "nas_service": "homepage-terminal.service",
+      "max_sessions": 3,
+      "grant_seconds": 900,
+      "ticket_seconds": 300,
+      "reboot_persistence": false,
+      "raw_terminal_payload_persisted_by_application": false,
+      "secret_names": [
+        "NAS_TERMINAL_TICKET_KEY",
+        "NAS_TERMINAL_AGENT_KEY",
+        "TICKET_KEY",
+        "AGENT_KEY"
+      ],
+      "verification": {
+        "as_of": "2026-11-01",
+        "live_pty_run": 41309413460,
+        "release_commit": "e201c580e0daeb12dad0afc01ca331ef3ab9c8da",
+        "deployment_id": "dpl_3GzqReBzkbNigbXaWrTL6M2wLYFu",
+        "scope": "Dated live NAS printf/PTY qualification; not a fresh host probe or current deployment claim"
+      },
+      "limits": [
+        "NAS RAM/CPU not measured",
+        "Phone/iPad authenticated UI not qualified in this evidence",
+        "Ticket revocation bounded by 5-minute expiry"
+      ]
     }
   ],
   "cross_cutting": {

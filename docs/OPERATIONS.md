@@ -11,9 +11,9 @@ kiểm tra lại checksum và ghi receipt. Chưa nghiệm thu thao tác dọn tr
 Bản v2 thêm chọn thư mục bằng chạm, Drive dùng ID để phân biệt trùng tên; cần cập nhật agent NAS.
 Đọc JSON cục bộ vẫn có dưới mục phụ. Xem [triển khai và giới hạn](DUPLICATES.md).
 
-## NAS Terminal — candidate 01/11/2026
+## NAS Terminal — đã triển khai, hồ sơ cập nhật 02/11/2026
 
-[Thiết kế, triển khai và nghiệm thu](NAS-TERMINAL.md): PTY/tmux tối đa 3 phiên, relay WebSocket outbound riêng; mặc định tắt. Chưa triển khai relay/agent NAS và chưa có số đo runtime. Không thay report publisher hoặc dữ liệu hiện hành.
+[NAS Terminal](https://homepage-nas.vercel.app/nas/terminal/) đã kích hoạt; bằng chứng runtime 01/11 xác nhận ticket auth, NAS online, mở PTY/gửi printf/nhận output/đóng phiên tạm đều PASS. Agent user service `homepage-terminal.service`; tối đa 3 phiên tmux, không cần Tailscale. Đã sửa 401 do whitespace thừa ở khóa clipboard. Đọc [hồ sơ vận hành và giới hạn](NAS-TERMINAL.md), không dùng trạng thái candidate trong lịch sử. Chưa đo RAM/CPU NAS hoặc nghiệm thu UI trực tiếp trên điện thoại; đợt tài liệu này không chạy kiểm tra host mới.
 
 
 ## Đổi lại tên repo backup — 31/10/2026

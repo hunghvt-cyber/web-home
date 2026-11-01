@@ -1,135 +1,109 @@
-# NAS Terminal — 01/11/2026
+# NAS Terminal — vận hành hiện hành
 
-## Hoạt động — nghiệm thu NAS lúc 20:03 ngày 01/11/2026
+Cập nhật tài liệu 02/11/2026 (Asia/Ho_Chi_Minh). Bằng chứng runtime gần nhất trong hồ sơ này là ngày **01/11/2026**, không phải lần kiểm tra host mới.
 
-Nguyên nhân HTTP 401 đã được xác nhận: GitHub clipboard keys có edge whitespace (44 thay vì 43 ký tự). Sau chuẩn hóa đầu/cuối ở workflow deploy và signer Vercel, [run 41309115094](https://github.com/hunghvt-cyber/web-home/actions/runs/41309115094) xác nhận ticket auth, NAS online và list 0 phiên đều PASS. Không yêu cầu chủ NAS tạo/dán lại khóa.
+## Trạng thái và nơi sử dụng
 
-Nghiệm thu [run 41309413460](https://github.com/hunghvt-cyber/web-home/actions/runs/41309413460), job 124856465702: BROWSER_TICKET_AUTH, NAS_AGENT ONLINE, READONLY_SESSION_LIST, NAS_PTY_INPUT_OUTPUT và TEMPORARY_SESSION_CLOSED đều PASS. Chỉ tạo một session ngẫu nhiên của bài test, dùng printf challenge không chứa secret, rồi kết thúc đúng session đó; không sửa các session khác hay camera/backup. Không lưu payload shell trong log.
+**Đã triển khai và kích hoạt Production:** https://homepage-nas.vercel.app/nas/terminal/
 
-NAS_TERMINAL_ENABLED đã đặt true ở Production sau bài test. Trang sử dụng là https://homepage-nas.vercel.app/nas/terminal/. Commit chứa mục này gỡ workflow qualification tạm, giữ workflow relay chạy manual; Git integration triển khai với cấu hình mới. Phải kiểm tra deployment READY và alias đúng commit riêng; không suy từ flag env. Chưa có người dùng đăng nhập/thao tác UI thật trên điện thoại hoặc số đo RAM/CPU NAS; các test PTY runtime nói trên được thực hiện qua relay với runner. Giới hạn thu hồi ticket 5 phút và session không sống qua reboot vẫn áp dụng.
+Source: [web-home/main](https://github.com/hunghvt-cyber/web-home). Giao diện, API, agent và relay cùng repo, chạy độc lập ở Vercel/NAS/Cloudflare. Không cần bật Tailscale hay mở cổng router.
 
+| Thành phần | Định danh |
+| --- | --- |
+| Homepage | Vercel project `homepage-nas`, production branch `main` |
+| Trang | `/nas/terminal/` |
+| API | `POST /api/auth?service=terminal`; dùng chung function auth để giữ giới hạn Vercel Hobby |
+| Relay | `homepage-nas-terminal`, https://homepage-nas-terminal.thanhhunga4-wtf.workers.dev |
+| NAS service | user service `homepage-terminal.service`, tài khoản `admin` |
+| Agent/venv | `/vol1/homepage-terminal-admin/` |
+| Config | `/home/admin/.config/homepage-terminal/config.json`, quyền 0600 |
+| tmux | socket `homepage-terminal-v1`, session `hp_<random-id>`, tối đa 3 phiên |
 
-## Kết nối sau khi cài agent — 19:40 ngày 01/11/2026
+Relay hiện còn phục vụ tính năng dọn file trùng. Đọc [DUPLICATES.md](DUPLICATES.md) trước khi sửa/deploy relay; giữ ranh giới ticket, route và dữ liệu giữa hai tính năng.
 
-Chủ NAS cung cấp KEY_PREPARE=PASS, pip websockets 15.0.1 aarch64 thành công và user service active. Đây chưa phải bằng chứng agent online. GitHub deploy retry job 124850203977 PASS, đã tạo Worker secrets TICKET_KEY và AGENT_KEY. Vercel metadata xác nhận NAS_TERMINAL_TICKET_KEY kiểu sensitive, chỉ Production; NAS_TERMINAL_ENABLED vẫn false.
+## Sử dụng
 
-Run [41307472573](https://github.com/hunghvt-cyber/web-home/actions/runs/41307472573), job 124850709608: BROWSER_TICKET_AUTH=PASS nhưng NAS_AGENT=WAITING và timeout sau 90 giây; chưa nhận được danh sách phiên. Chưa gửi shell input, tạo PTY hoặc kết thúc session. Cần diagnostic TLS/HTTP handshake và user service trên NAS; không tự kết luận key mismatch hoặc thay khóa. Workflow qualification tạm được giữ trong khi xử lý để retry đúng bài kiểm tra; phải gỡ khi nghiệm thu hoàn tất. Chưa bật terminal production.
+1. Mở khóa Homepage bằng mật khẩu hiện tại.
+2. Mở NAS Terminal, nhập lại mật khẩu để cấp quyền terminal.
+3. Chọn **＋ Mở phiên**, hoặc mở lại phiên có sẵn.
+4. Dùng ô terminal trực tiếp; có Copy màn hình, vùng dán nhiều dòng, Ctrl+C, Tab và Esc.
 
+**Ngắt kết nối / đóng trang** giữ shell chạy. **Kết thúc phiên** dừng shell trong phiên được chọn và có xác nhận. Chuyển tab chỉ đổi renderer; một phiên chỉ có một renderer hiện hành. Mở cùng phiên từ cửa sổ khác ngắt renderer cũ.
 
-## Relay bootstrap — 18:48 ngày 01/11/2026
+Phiên được giữ qua mất mạng hoặc restart riêng agent nhờ tmux. **Reboot NAS, mất điện hoặc mất tmux server không giữ được shell.** Không tự gửi lại input chưa được xác nhận sau mất mạng; kiểm tra kết quả trước khi chạy lại.
 
-Sau khi chủ tài khoản sửa Account ID, attempt mới của [run 41302975431](https://github.com/hunghvt-cyber/web-home/actions/runs/41302975431) PASS. Worker `homepage-nas-terminal` đã upload/deploy, version `c2eec678-cf49-4c11-934a-9df7ce2241c3`; endpoint `https://homepage-nas-terminal.thanhhunga4-wtf.workers.dev`. Workflow không nhận hai terminal keys, nên chưa cấu hình quyền browser/agent và chưa kích hoạt Homepage Terminal. Không coi token có mặt ở attempt trước là đã xác minh; attempt này mới có bằng chứng API deploy Cloudflare thành công.
+## Kiến trúc và quyền
 
-HTTP probe từ môi trường kiểm tra trả 403, body `error code: 1010` cho root và /connect. Đây không phải bằng chứng các nhánh xác thực Worker trả đúng 401/403; cần kiểm từ NAS/runner trước kết luận end-to-end. Chưa cài agent lên NAS, chưa có shell remote hoặc số đo RAM/CPU thật. Workflow tạm vẫn đã gỡ; chỉ workflow manual còn trong main.
+Browser → WSS relay Cloudflare ← agent NAS chủ động kết nối ra ngoài → PTY → tmux → shell tài khoản admin.
 
+Đây là terminal PTY qua web, không phải giao thức SSH. Agent dùng Python 3.11 và websockets 15.0.1; user NAS đã xác nhận tmux và Linger=yes. Installer chỉ quản lý service agent riêng, không thay recorder, retention, backup, tunnel hoặc restart host.
 
-## Trạng thái triển khai 18:41 ngày 01/11/2026
+- Giữ mật khẩu/owner session và limiter Homepage hiện hành; không thêm database.
+- Quyền terminal sau nhập lại mật khẩu: 15 phút; ticket HMAC: 5 phút. Browser tự nối lại trước ticket hết hạn và cấp ticket mới qua xác thực Homepage.
+- Logout/đổi mật khẩu không thu hồi tức thời ticket đã cấp: giới hạn còn hiệu lực tối đa 5 phút.
+- `NoNewPrivileges=true`: không hỗ trợ sudo nâng quyền trong phiên.
+- `KillMode=process` có chủ đích để restart Python không giết tmux server/shell. Không tự đổi về mặc định control-group.
+- ACK input chỉ xác nhận thao tác gửi vào PTY, không xác nhận lệnh shell đã hoàn thành.
+- Relay nằm trong trust boundary, có thể đọc nội dung sau giải mã TLS. Ứng dụng không lưu payload terminal vào GitHub, Koofr, GAS, database relay hay browser storage; tmux có scrollback trong RAM. Đây không phải cam kết mọi chương trình trong shell đều không ghi log.
+- Giới hạn: input 8 KiB/message, relay frame 32 KiB, 80 command/s/browser; scrollback 2000 dòng; queue output 32 × 8 KiB/renderer. Output quá nhanh sẽ detach renderer để giữ shell.
 
-PR #36 đã merge tại `629329880bb151fd81882bf37214afff447c5d86`. Homepage deployment `dpl_CQn8xBbnxX47rfzwKafGoyFJ8gGr` READY; terminal chưa được kích hoạt. Bootstrap run [41302975431](https://github.com/hunghvt-cyber/web-home/actions/runs/41302975431) check PASS nhưng deploy dừng trước lệnh Cloudflare với `Invalid CLOUDFLARE_ACCOUNT_ID secret`. Token secret có mặt; chưa xác minh token bằng API. Không in giá trị secret. Cần sửa Account ID đúng 32 ký tự hex; chưa có relay/agent NAS thật hoặc số đo tài nguyên. Workflow bootstrap một lần đã được gỡ; workflow manual chính được giữ.
+## Cấu hình — chỉ tên và nơi lưu
 
-Những mô tả candidate/chưa merge phía dưới là phạm vi thiết kế và bằng chứng trước triển khai; trạng thái ở mục này được ưu tiên.
-
-
-## Phạm vi và kiến trúc
-
-Trang `/nas/terminal/` thuộc **web-home**, Vercel project **homepage-nas**. Giao diện HTML/JS thuần, xterm được bundle từ npm; không tải script CDN. Agent Python và relay Cloudflare Worker/Durable Object cùng repo nhưng triển khai độc lập.
-
-Browser → relay WebSocket ← agent NAS → PTY → tmux → shell tài khoản NAS. NAS chủ động kết nối WSS ra ngoài; không mở port router, không cần Tailscale. Đây là shell qua PTY, không phải SSH protocol. Relay chuyển tiếp plaintext sau TLS; nhà cung cấp relay nằm trong trust boundary. Không lưu input/output trong kho relay, GitHub, Koofr, GAS hoặc browser storage.
-
-Tối đa ba session `hp_<random-id>` trong tmux socket riêng `homepage-terminal-v1`; không đụng các session tmux khác. Một renderer hiện hành mỗi session; mở từ cửa sổ khác sẽ ngắt renderer trước đó. Chuyển tab chỉ detach renderer. Đóng trang, mất mạng hoặc restart agent giữ shell. **Reboot NAS hoặc mất tmux server sẽ mất session**; đây không phải cơ chế khôi phục tác vụ sau reboot.
-
-Các nút: mở/chuyển phiên, làm mới danh sách, copy buffer, vùng dán chỉnh sửa trước khi gửi, Ctrl+C/Tab/Esc, ngắt kết nối và kết thúc phiên có xác nhận. Tên tab hiện là Phiên 1–3; chưa có đổi tên hoặc chia màn hình. Homepage mới có lối tắt; online/số phiên chỉ được đọc sau mở terminal, chưa có thẻ trạng thái tự cập nhật trên homepage.
-
-## Đăng nhập và giới hạn
-
-- Giữ nguyên authority mật khẩu Homepage và limiter hiện hành; không thêm database hoặc sửa schema Supabase.
-- API yêu cầu owner cookie hợp lệ và same-origin JSON. Mở terminal yêu cầu nhập lại mật khẩu, qua limiter cũ; grant 15 phút trong cookie mã hóa.
-- Ticket HMAC riêng có hạn 5 phút, audience cố định, client ID ngẫu nhiên. Ticket chỉ đi trong message WebSocket đầu tiên, không query URL/localStorage.
-- Browser tự nối lại trước ticket hết hạn; mỗi lần cấp lại ticket kiểm owner/password version. Hết grant 15 phút phải nhập lại mật khẩu. Shell vẫn sống.
-- Logout ở UI đóng renderer; ticket đã cấp còn hiệu lực tối đa 5 phút. Password rotation không thu hồi ngay socket đang tồn tại; bounded expiry 5 phút. Không mô tả đây là thu hồi tức thời.
-- Agent credential riêng chỉ ở NAS owner-only config và Worker secret; không được gửi xuống browser. Agent chạy bằng tài khoản thường, `NoNewPrivileges=true`; sudo nâng quyền trong phiên không được hỗ trợ.
-- Input có sequence, không replay tự động sau mất kết nối. ACK biểu thị agent đã nhận/thực hiện thao tác gửi vào PTY, **không chứng minh lệnh shell đã hoàn thành**. Input chưa ACK là kết quả chưa xác định, phải xem shell trước khi chạy lại.
-- Tối đa 8 KiB input/message, 32 KiB relay frame, 80 browser command/s. tmux scrollback 2000 dòng; queue output tối đa 32 × 8 KiB mỗi renderer. Output quá nhanh sẽ detach renderer, shell vẫn chạy.
-- Không dùng token HMAC/cookie/key reporting, Koofr, Notes hoặc Gemini làm key relay.
-
-## Cấu hình triển khai
-
-Endpoint là `POST /api/auth?service=terminal`, dùng chung function auth để giữ giới hạn 12 functions của Vercel Hobby. Chưa bật tự động ở production. API fail closed nếu không có `NAS_TERMINAL_ENABLED=true` và cấu hình hợp lệ.
-
-| Nơi | Tên | Nội dung |
+| Nơi | Tên | Yêu cầu |
 | --- | --- | --- |
-| Vercel homepage-nas, production | NAS_TERMINAL_ENABLED | `true` sau qualification |
-| Vercel homepage-nas, production | NAS_TERMINAL_RELAY_URL | HTTPS origin của Worker, không `/connect` |
-| Vercel homepage-nas secret | NAS_TERMINAL_TICKET_KEY | key random ≥32 ký tự, giống Worker TICKET_KEY |
-| Worker secret | TICKET_KEY | key xác minh ticket, tách agent key |
-| Worker secret | AGENT_KEY | key random ≥32 ký tự, giống NAS config |
-| Worker vars | PORTAL_ORIGIN | `https://homepage-nas.vercel.app` |
-| NAS config 0600 | relay_url | `wss://<worker>/connect` |
-| NAS config 0600 | agent_key | giống Worker AGENT_KEY |
+| Vercel Production | `NAS_TERMINAL_ENABLED` | Đã bật `true` sau nghiệm thu |
+| Vercel Production | `NAS_TERMINAL_RELAY_URL` | HTTPS origin Worker, không thêm /connect |
+| Vercel Production, Secret/Sensitive | `NAS_TERMINAL_TICKET_KEY` | Cùng phần khóa chuẩn hóa với Worker TICKET_KEY; không đưa sang Preview |
+| GitHub Actions Secrets | `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | Token giới hạn đúng account; Workers Scripts Edit, Account Settings Read |
+| GitHub Actions Secrets | `NAS_TERMINAL_TICKET_KEY`, `NAS_TERMINAL_AGENT_KEY` | Hai khóa riêng; triển khai theo cặp |
+| Worker secrets | `TICKET_KEY`, `AGENT_KEY` | Tách khóa ticket và agent |
+| Worker vars | `PORTAL_ORIGIN` | https://homepage-nas.vercel.app |
+| NAS config | `relay_url`, `agent_key` | WSS /connect; khóa agent trùng Worker AGENT_KEY |
+| NAS owner-only files | `agent-key.txt`, `ticket-key.txt` | Trong thư mục config 0700; file 0600, không commit/gửi chat |
 
-Cần tài khoản Cloudflare Workers Free với SQLite Durable Objects. Có thể dùng hostname workers.dev, không cần mua domain. Free có quota; hết quota thì kết nối lỗi, không tự nâng gói hoặc mở billing. Hibernation không tính duration khi idle; thực tế chi phí/quota phụ thuộc plan của tài khoản và lưu lượng terminal. Không hứa miễn phí vô hạn.
+Lỗi 401 khi cài đặt do cả hai khóa copy sang GitHub có whitespace thừa (44 thay vì 43 ký tự). Workflow upload và signer Vercel đã trim đầu/cuối nhất quán; không đổi phần khóa, không in giá trị. Khoảng trắng bên trong bị chặn. Không tạo/dán lại khóa chỉ vì gặp 401; kiểm tra nguyên nhân trước.
 
-Triển khai Worker bằng Wrangler chính thức với `terminal-relay/wrangler.toml`; đặt hai Worker secrets qua secret store, không commit env. Chỉ bật quan sát nếu đã xác nhận không ghi body/header/token. Tự động log Worker đang tắt.
+Workflow `NAS Terminal relay` (`.github/workflows/nas-terminal-relay.yml`) chỉ chạy manual trên main; kiểm tra code trước khi cấp credential cho deploy. Các workflow bootstrap/qualification tạm đã gỡ. Deploy Homepage không tự cập nhật agent NAS hoặc Worker; deploy Worker không chứng minh agent đã cập nhật.
 
-## Triển khai từ GitHub Actions
+Cloudflare Free có quota; không tự nâng plan hoặc bật billing. Không dùng khóa Gemini, Notes, reporting hoặc shared session làm khóa relay.
 
-Workflow `NAS Terminal relay` chỉ chạy manual trên `main`; kiểm tra code trước khi job deploy được cấp credential. Không chạy trên pull_request hoặc tự chạy theo push. Source và CLI không tự thay homepage production hay cài NAS.
+## Bằng chứng đã đạt — 01/11/2026
 
-Đặt hai repository Actions secrets tại Settings → Secrets and variables → Actions:
+| Hạng mục | Bằng chứng và phạm vi |
+| --- | --- |
+| Source ban đầu | [PR #36](https://github.com/hunghvt-cyber/web-home/pull/36), merge `629329880bb151fd81882bf37214afff447c5d86` |
+| Relay + NAS | [Run 41309115094](https://github.com/hunghvt-cyber/web-home/actions/runs/41309115094): ticket auth PASS, NAS online, đọc danh sách 0 phiên |
+| PTY NAS thật | [Run 41309413460](https://github.com/hunghvt-cyber/web-home/actions/runs/41309413460), job `124856465702`: tạo phiên tạm, printf challenge, nhận output, đóng đúng phiên tạm đều PASS |
+| Release terminal | Commit `e201c580e0daeb12dad0afc01ca331ef3ab9c8da`; deployment `dpl_3GzqReBzkbNigbXaWrTL6M2wLYFu` READY; alias chính trỏ đúng deployment tại lúc nghiệm thu, bypass rỗng |
+| CI release | [Run 41309552367](https://github.com/hunghvt-cyber/web-home/actions/runs/41309552367) PASS; Node sau sửa 115/115, Python có agent/tmux và chuẩn bị khóa |
+| Public HTTP | Trang, JS/CSS/xterm 200; API connect chưa đăng nhập trả 401 sau canonical redirect |
 
-- `CLOUDFLARE_API_TOKEN`: token theo mẫu Edit Cloudflare Workers, chỉ cho đúng tài khoản. Không dùng Global API Key.
-- `CLOUDFLARE_ACCOUNT_ID`: Account ID của tài khoản đó.
+Đây là snapshot release terminal, không khẳng định alias hiện vẫn trỏ deployment cũ sau các cập nhật Homepage khác. Ngày 02/11 chỉ đối chiếu source và cập nhật tài liệu; không mở phiên NAS mới hay dùng lại secret để thử.
 
-Hai secret `NAS_TERMINAL_TICKET_KEY` và `NAS_TERMINAL_AGENT_KEY` cấu hình theo cặp khi kích hoạt. Thiếu cả hai thì workflow chỉ bootstrap relay, không tạo credential tạm hoặc tự mở quyền. Thiếu một trong hai thì fail trước deploy. Chúng phải khác nhau, mỗi key ≥32 ký tự. Ticket key phải trùng với Vercel; agent key phải trùng với config NAS. Không in, commit hay đưa key vào artifact.
+Chưa có số đo RAM/CPU/traffic NAS; các ước tính hội thoại không phải số đo. Chưa ghi nhận nghiệm thu UI đăng nhập trực tiếp trên điện thoại/iPad, hoặc đủ 3 phiên đồng thời trên NAS thật; kiểm tra giới hạn 3 phiên/Ctrl+C/reconnect đã đạt trong CI. Tên tab hiện Phiên 1–3; chưa có đổi tên/chia màn hình hay thẻ online tự cập nhật trên homepage.
 
-Sau khi workflow có trên main, chạy manual. Nó triển khai đúng Worker `homepage-nas-terminal` bằng Wrangler pin 4.156.0; không đổi plan hay cấu hình billing. Nếu chưa đăng ký hostname workers.dev thì chủ tài khoản hoàn tất lựa chọn hostname trên dashboard. Không tuyên bố đường truyền hoạt động từ kết quả deploy Worker đơn lẻ.
+## Kiểm tra và cập nhật trên NAS
 
-## Cài trên NAS
-
-Đọc source và checkout **đúng commit đã qua CI**, không chạy script remote qua pipe. NAS cần Python 3.11+, module venv, tmux, user systemd và quyền tạo thư mục dưới /vol1. Không thay recorder, retention, backup engine, tunnel hoặc dịch vụ có sẵn. Script chỉ tạo/cập nhật `homepage-terminal.service` của user.
-
-Từ checkout đã xác minh trên NAS:
-
-```sh
-copyout 'bash nas-agent/install.sh'
-```
-
-Script cài agent/venv tại `/vol1/homepage-terminal-<user>` và hỏi relay URL/key lần đầu; key nhập ẩn. Cấu hình lưu `~/.config/homepage-terminal/config.json` 0600. Không paste key vào chat hay output copyout. Script kiểm tra mount /vol1 và từ chối root; không tự cài package hệ thống hoặc restart host.
-
-`KillMode=process` có chủ đích: systemd chỉ dừng Python main để tmux server/shell sống qua restart service. Không đặt MemoryMax cho cả service vì sẽ cộng cả tác vụ shell; resource đo phải tách agent và workload. User lingering phải được xác minh để service còn chạy sau logout/reboot; installer không tự thay thiết lập host đó.
-
-Kiểm tra metadata, không in config/key:
+Các lệnh sau không in khóa:
 
 ```sh
 copyout 'systemctl --user is-active homepage-terminal.service; systemctl --user is-enabled homepage-terminal.service; loginctl show-user "$USER" -p Linger'
 ```
 
-Dừng agent không kết thúc shell còn sống:
+Chỉ từ checkout đúng commit đã kiểm tra, khi cần cài/cập nhật agent:
+
+```sh
+copyout 'bash nas-agent/install.sh'
+```
+
+`nas-agent/prepare.py` tạo config/khóa owner-only, giữ khóa hiện có và từ chối symlink, quyền đọc công khai hoặc khóa mâu thuẫn. Không xóa config để chữa lỗi và không chạy lại prepare nhằm xoay khóa tự phát.
+
+Dừng riêng kết nối agent, giữ shell tmux:
 
 ```sh
 copyout 'systemctl --user disable --now homepage-terminal.service'
 ```
 
-## Nghiệm thu bắt buộc trước tuyên bố hoạt động
+NAS từng báo không đủ quyền đọc journal user; không coi đó là service chết. Dùng is-active và kiểm tra handshake trả mã lỗi, tuyệt đối không in Authorization header/config. HTTP 409 khi thử thêm agent có thể là đã có agent hiện hành; không kết luận key sai. Chỉ có thể kết luận lỗi TLS, HTTP 401 hoặc offline từ bằng chứng cụ thể.
 
-1. CI build + Node + Python + Worker runtime test, PTY/tmux integration.
-2. Relay thật: sai Origin, sai key, ticket hết hạn đều bị chặn. Không auth thì không có output/input.
-3. NAS thật: online, tạo đủ 3 phiên, phiên thứ tư bị chặn, nhập Unicode, paste nhiều dòng, Ctrl+C, resize.
-4. Đóng tab/mất mạng/restart **chỉ agent** → mở lại cùng session và PID shell. Input không tự gửi lại.
-5. Đóng một session không đụng session khác; logout/hết grant/rotation kiểm đúng giới hạn thu hồi 5 phút.
-6. Đo RAM/CPU/traffic idle và khi output, so sánh NAS trước/sau; không lấy ước tính hội thoại làm số đo.
-7. Xác minh camera, retention, backup/report trước/sau không đổi. Chỉ sau đó ghi deployment ID, commit và bằng chứng runtime vào tài liệu.
-
-## Trạng thái
-
-Source đã chuẩn bị; [PR #36](https://github.com/hunghvt-cyber/web-home/pull/36). CI đầu [41284459402](https://github.com/hunghvt-cyber/web-home/actions/runs/41284459402) trên code 377edf3 đạt 114/114 Node và 5/5 Python, gồm PTY/tmux thật trên GitHub runner; không phải NAS thật. Bản tiếp theo ghép API vào function auth để giữ Hobby và bổ sung kiểm tra 3 phiên/Ctrl+C. Chưa có bằng chứng relay production hoặc agent trên NAS. Không coi UI render, CI xanh hay deployment READY là chứng minh điều khiển NAS thành công.
-
-## Chuẩn bị khóa trên NAS
-
-`nas-agent/prepare.py --relay-url wss://homepage-nas-terminal.thanhhunga4-wtf.workers.dev/connect` tạo config.json, agent-key.txt và ticket-key.txt dưới ~/.config/homepage-terminal (thư mục 0700, file 0600); không in khóa. Chạy lại giữ nguyên khóa, từ chối config/khóa mâu thuẫn, file đọc công khai hoặc symlink. Chạy prepare trước install.sh để tránh nhập key tương tác. Hai key file chỉ dùng điền vào secret stores, không commit hoặc gửi chat.
-
-GitHub Actions secrets: NAS_TERMINAL_AGENT_KEY lấy agent-key.txt; NAS_TERMINAL_TICKET_KEY lấy ticket-key.txt. Vercel project homepage-nas, chỉ Production, Secret NAS_TERMINAL_TICKET_KEY lấy cùng ticket-key.txt. Relay URL và flag false đã được chuẩn bị riêng; chỉ bật sau qualification. Không đưa khóa sang Preview.
-
-## Chuẩn hóa khóa clipboard
-
-Audit run 41308701573: cả hai GitHub keys length=44, edge whitespace=true, sau trim đúng định dạng URL-safe 43 ký tự do NAS tạo. Đây là nguyên nhân cụ thể phù hợp với agent HTTP 401. Deployment validator/bulk secret upload và Vercel ticket signer chuẩn hóa duy nhất whitespace đầu/cuối; không đổi phần khóa, không ghi giá trị. Khoảng trắng bên trong bị chặn. Workflow relay được gọi lại từ qualification trên main để đồng bộ rồi kiểm tra chỉ đọc; kết quả runtime mới phải được ghi riêng. Không cần chủ NAS tạo hoặc dán lại khóa.
+[Lịch sử cài đặt và các trạng thái trước nghiệm thu](history/NAS-TERMINAL-SETUP-20261101.md) được giữ nguyên để đối chiếu, không dùng làm trạng thái hiện hành.

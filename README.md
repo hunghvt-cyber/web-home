@@ -30,6 +30,8 @@ Telegram là nguồn ghi chi tiêu; Tailscale phục vụ hai shortcut NAS. Home
 
 ## Trạng thái đang dùng
 
+- NAS Terminal: [mở terminal trên web](https://homepage-nas.vercel.app/nas/terminal/), tối đa 3 phiên PTY/tmux qua relay outbound, không cần Tailscale. Đã nghiệm thu input/output trên NAS ngày 01/11/2026; [vận hành, cấu hình và giới hạn](docs/NAS-TERMINAL.md). Không coi đây là SSH protocol hoặc cơ chế giữ shell sau reboot.
+
 - Camera/NAS: trình duyệt → `/api/nas-report` → GAS reporting → Drive.
 - Hai báo cáo backup: `/api/backup-report?source=gdrive|gphotos` → cùng GAS reporting.
   [Bằng chứng 20/10](docs/results/backup-report-recovery-20261020.md) xác nhận cả hai HTTP 200, signed ACK và run gốc. Không coi NO_REPORT 19/10 là lỗi đang tồn.
