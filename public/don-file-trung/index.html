@@ -15,7 +15,7 @@
     <p id="nas-scan-message" role="status" aria-live="polite">Mở khóa Homepage để kết nối NAS.</p>
     <div id="nas-scan-workspace" hidden>
       <button id="nas-scan-connect" type="button">Kết nối NAS</button>
-      <form id="nas-scan-form">
+      <div id="nas-scan-form">
         <label for="nas-scan-cloud">Cloud</label><select id="nas-scan-cloud" disabled><option value="gdrive">Google Drive</option><option value="koofr">Koofr</option></select>
         <p id="nas-scan-scope">Chưa chọn thư mục.</p><button id="nas-folder-open" type="button" disabled>Chọn thư mục</button>
         <div id="nas-folder-picker" hidden aria-label="Chọn thư mục cloud">
@@ -25,10 +25,9 @@
           <button id="nas-folder-more" type="button" hidden>Xem thêm thư mục</button>
           <div class="scan-actions"><button id="nas-folder-choose" type="button" disabled>Quét thư mục này</button><button id="nas-folder-close" type="button">Đóng</button></div>
         </div>
-        <button id="nas-scan-start" type="submit" disabled>Bắt đầu quét</button>
-      </form>
+      </div>
       <div class="scan-actions"><button id="nas-scan-refresh" type="button" disabled>Lượt gần nhất</button><button id="nas-scan-pause" type="button" disabled>Tạm dừng</button><button id="nas-scan-resume" type="button" disabled>Tiếp tục</button></div>
-      <p id="nas-scan-progress" role="status"></p>
+      <p id="nas-scan-progress" role="status"></p><p id="nas-scan-action" role="status" aria-live="polite"></p>
       <p class="muted">Đóng trang vẫn quét tiếp. NAS khởi động lại sẽ giữ checkpoint và chờ bấm Tiếp tục. Quét chỉ đọc metadata và checksum. Dọn file cần chọn file, mở quyền và xác nhận.</p>
       <div id="nas-scan-results" hidden><h3>Nhóm trùng</h3><p class="muted">Chọn bản cần dọn; phải giữ ít nhất một bản mỗi nhóm. Dung lượng dưới đây là ước tính bản dư.</p>
       <div id="nas-cleanup-panel" hidden>
