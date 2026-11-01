@@ -1,8 +1,9 @@
 # Dọn file trùng — NAS, 01/11/2026
 
 `/don-file-trung/` opens from a small Homepage shortcut in a new tab. The owner selected
-NAS for large inventories. This increment is **read-only**; no delete, move, quarantine,
-retention/sync changes or content downloads. Drive and Koofr are independent scan scopes.
+NAS for large inventories. Scanning is read-only. Version 3 adds explicitly selected recoverable cleanup: Drive
+Trash or Koofr GoogleBackup-Trash. No permanent delete or retention/sync changes.
+Drive and Koofr are independent scan scopes.
 
 ## Transport and access
 
@@ -18,7 +19,8 @@ scans running; NAS/agent restart marks running checkpoints interrupted for expli
 `NAS_TERMINAL_ENABLED`, `NAS_TERMINAL_RELAY_URL`, `NAS_TERMINAL_TICKET_KEY` remain the
 transport configuration. `nas-terminal-relay.yml` now deploys reviewed main pushes that
 change Worker/protocol files; its check job runs terminal and scan scope tests first.
-No new provider login or key copying is performed.
+No new provider login or key copying is performed. Mutation tickets additionally require
+a fresh Homepage password and a signed cleanup grant, checked for exact expiry at the relay.
 
 ## Host installation
 
@@ -35,8 +37,8 @@ UI disables them. No new credentials are requested or stored by this installer.
 It creates owner-only `~/.config/homepage-duplicates/config.json` with provider allowlist,
 absolute rclone binary and HDD state directory `/vol1/homepage-duplicates-<uid>`.
 It preserves terminal credentials and the first previous `agent.py.before-duplicates`,
-copies the agent/scanner (version 2 for folder selection), restarts only `homepage-terminal.service` (tmux shells survive).
-No scan is started by installation. `/vol1` is checked before SQLite connections, avoiding
+copies the agent/scanner/cleanup module (version 3), restarts only `homepage-terminal.service` (tmux shells survive).
+Installation enables cleanup in the private scanner config but starts no scan or cleanup. `/vol1` is checked before SQLite connections, avoiding
 new root-disk state when the HDD is unavailable. Invalid scanner config disables only the
 scanner; terminal remains available.
 
@@ -48,7 +50,7 @@ per-directory ceiling. No shell or generic remote command. Folder inputs reject 
 selectors, controls and traversal. Names are text, not HTML. Native Google documents
 without binary checksums are counted as unhashed. Duplicate key: size + MD5 (preferred),
 otherwise SHA256. Files lacking either are excluded from grouping and explicitly counted.
-Checksums are scan evidence, not fresh authorization for a later cleanup feature.
+Checksums are scan evidence; cleanup independently revalidates the target and a retained copy.
 
 Streaming JSON parser and SQLite WAL keep file inventory off browser RAM. A worker-local
 connection avoids reopening SQLite per file, with short committed transactions. IDs
@@ -74,7 +76,7 @@ nodes are keyed by ID, so resuming one duplicate-name node cannot delete another
 local inventory. Migration affects local metadata only, never provider files.
 
 Metadata paths over 1024 characters and records over 2 MiB fail explicitly. This version does not claim a point-in-
-time provider snapshot; a future cleanup must independently revalidate every selection.
+time provider snapshot; cleanup revalidates every selection, but cannot make an atomic transaction against concurrent edits in external apps.
 
 Only completed scans expose groups (20/page); member paths are fetched on expansion
 (5/page) so large groups don't exceed relay message limits. The UI reports discovered
@@ -98,3 +100,56 @@ report host/cloud qualification until those observations exist.
 Rollback scanner integration: stop the agent service, restore the preserved prior agent
 file, then start only that service. Keep SQLite/config for diagnosis; do not delete cloud
 files or terminal keys. Full terminal functionality is covered by the existing relay tests.
+
+
+## Recoverable cleanup v3
+
+Owner authorized selected cleanup and Koofr GoogleBackup-Trash fallback. The UI starts
+unchecked. Select at most 20 file handles, re-enter Homepage password (15-minute separate
+cleanup grant), request a server plan, review the action/count and explicitly confirm.
+No cloud write is performed by installation, scanning, planning or tests.
+
+The relay allows prepare/apply only with a signed, unexpired cleanup grant; ordinary scan
+and terminal tickets cannot mutate. No raw source, destination, provider ID or permanent-
+delete option is accepted from the browser. Plans bind the existing completed scan,
+provider configuration and selected identities. Server keeps at least one unselected,
+unremoved, non-protected copy in every group, even across separate prepared plans.
+Profile/state, guide storage and GoogleBackup-Trash files cannot be selected or used as
+the sole retained copy. Foreign/stale handles and changed provider config are rejected.
+
+Drive refreshes its existing rclone OAuth session, reads credentials in local memory only,
+then uses fixed-host Drive v2 metadata/trash endpoints on exact IDs. It requires current
+name/parent/size/MD5 and an ETag, sends If-Match and verifies trashed=true. It never calls
+permanent DELETE and never guesses a file by a duplicate filename. SHA-only files,
+shortcuts/non-single IDs or missing version evidence fail closed. Authorization headers
+are never logged; redirects are forbidden. Sources:
+https://developers.google.com/workspace/drive/api/reference/rest/v2/files
+https://developers.google.com/workspace/drive/api/reference/rest/v2/files/trash
+
+Koofr validates the native provider and server-side Move feature, rechecks identity and
+size/checksum, then moves within the same remote/mount to
+GoogleBackup-Trash/<plan>/<file-handle>/<original-name>. Destination directories must be
+empty and --immutable forbids overwriting changed content. Destination checksum and
+source absence must verify before reporting done. This preserves the bytes for recovery;
+it does not reduce Koofr storage usage. No permanent deletion fallback exists.
+
+SQLite journals each pending/applying/done/uncertain item before and after its mutation.
+A failed/ambiguous write is not retried by the tool; after restart running plans are
+interrupted and applying items become uncertain. Inspect the cloud or run a new scan to
+reconcile. Already-applied plan IDs return status only. Successful items are tombstoned
+in that scan's inventory, preventing a later plan from selecting a removed keeper.
+The worker is exclusive with scans and checks for agent shutdown before each write.
+Snapshot inventory.before-cleanup.sqlite3 is preserved before additive schema migration.
+
+Concurrent cloud edits and external sync jobs remain outside the tool's transaction;
+the UI explains possible propagation. No sync engine is changed or paused by this feature.
+Rollback requires matching prior agent/scanner modules plus the pre-cleanup database,
+not just restoring an older scanner against a newer schema. Keep configs/keys/receipts.
+
+Owner-reported v2 runtime evidence: Drive 9 files/1 folder at 23:48:10 and Koofr 10 files/
+4 folders at 23:49:27 on 01/11/2026, all with checksums and no duplicate groups. These
+prove basic scan paths only. Cleanup tests use fake providers/HTTP fixtures, including
+retain-one, changed keeper, unknown outcomes, plan replay, restart, protected namespaces,
+conditional exact-ID Drive trash and Koofr destination conflict handling. No real cloud
+file has been removed or moved in the authoring session; v3 host activation and live
+cleanup qualification remain pending owner-selected files.

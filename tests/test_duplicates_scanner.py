@@ -8,6 +8,7 @@ import tempfile
 import time
 import unittest
 
+sys.path.insert(0,str(Path(__file__).resolve().parents[1] / 'nas-agent'))
 spec = importlib.util.spec_from_file_location('duplicates', Path(__file__).resolve().parents[1] / 'nas-agent/duplicates.py')
 module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
 Scanner = module.Scanner

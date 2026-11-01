@@ -37,3 +37,26 @@ test('duplicates API requires owner and origin, mints only the scan audience',as
   r=response();await h({method:'POST',headers:{origin:'https://homepage.example','content-type':'application/json'},body:{action:'connect'}},r);
   assert.equal(r.code,200);assert.equal(r.value.aud,'nas-duplicates');
 });
+test('cleanup scope needs a fresh password and expires on the relay',async()=>{
+  process.env.PORTAL_BASE_URL='https://homepage.example';const session={authVersion:'v1',async save(){}};let checks=0;
+  const h=createDuplicatesHandler({authorize:async()=>session,config:()=>({}),passwordStore:{current:async()=>({version:'v1'}),matches:async p=>p==='right'},limit:async()=>{checks++;},now:()=>1000,mint:(c,n,aud,clean)=>({clean})});
+  const response=()=>({setHeader(){},status(n){this.code=n;return this;},json(value){this.value=value;}});
+  const req=body=>({method:'POST',headers:{origin:'https://homepage.example','content-type':'application/json'},body});
+  let r=response();await h(req({action:'connect'}),r);assert.equal(r.value.clean,false);
+  r=response();await h(req({action:'unlock',password:'wrong'}),r);assert.equal(r.code,401);
+  r=response();await h(req({action:'unlock',password:'right'}),r);assert.equal(r.code,200);assert.equal(checks,2);
+  r=response();await h(req({action:'connect'}),r);assert.equal(r.value.clean,true);
+  for(const grant of [false,true]){
+    const agent=socket({role:'agent'}),browser=socket({role:'browser',cid:id,aud:'nas-duplicates',clean:grant,cleanUntil:Date.now()+10000,exp:Date.now()+10000,budgetAt:Date.now(),count:0});
+    const room=new TerminalRoom({getWebSockets:()=>[agent,browser],storage:{setAlarm:async()=>{},deleteAlarm:async()=>{}}},{});
+    await room.webSocketMessage(browser,JSON.stringify({type:'command',command:{op:'audit',id,seq:1,action:'apply_cleanup',planId:id}}));
+    assert.equal(agent.messages.length,grant?1:0);
+  }
+});
+test('cleanup protocol has bounded selection and rejects arbitrary source/destination commands',()=>{
+  const c={op:'audit',id,seq:1,action:'prepare_cleanup',scanId:id};
+  assert.throws(()=>command({...c,fileKeys:[]}));assert.throws(()=>command({...c,fileKeys:[id,id]}));
+  assert.throws(()=>command({...c,fileKeys:['remote:anything']}));
+  const clean=command({...c,fileKeys:[id],destination:'somewhere',deletePermanently:true});
+  assert.equal(clean.destination,undefined);assert.equal(clean.deletePermanently,undefined);
+});
