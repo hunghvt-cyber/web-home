@@ -107,3 +107,9 @@ copyout 'systemctl --user disable --now homepage-terminal.service'
 ## Trạng thái
 
 Source đã chuẩn bị; [PR #36](https://github.com/hunghvt-cyber/web-home/pull/36). CI đầu [41284459402](https://github.com/hunghvt-cyber/web-home/actions/runs/41284459402) trên code 377edf3 đạt 114/114 Node và 5/5 Python, gồm PTY/tmux thật trên GitHub runner; không phải NAS thật. Bản tiếp theo ghép API vào function auth để giữ Hobby và bổ sung kiểm tra 3 phiên/Ctrl+C. Chưa có bằng chứng relay production hoặc agent trên NAS. Không coi UI render, CI xanh hay deployment READY là chứng minh điều khiển NAS thành công.
+
+## Chuẩn bị khóa trên NAS
+
+`nas-agent/prepare.py --relay-url wss://homepage-nas-terminal.thanhhunga4-wtf.workers.dev/connect` tạo config.json, agent-key.txt và ticket-key.txt dưới ~/.config/homepage-terminal (thư mục 0700, file 0600); không in khóa. Chạy lại giữ nguyên khóa, từ chối config/khóa mâu thuẫn, file đọc công khai hoặc symlink. Chạy prepare trước install.sh để tránh nhập key tương tác. Hai key file chỉ dùng điền vào secret stores, không commit hoặc gửi chat.
+
+GitHub Actions secrets: NAS_TERMINAL_AGENT_KEY lấy agent-key.txt; NAS_TERMINAL_TICKET_KEY lấy ticket-key.txt. Vercel project homepage-nas, chỉ Production, Secret NAS_TERMINAL_TICKET_KEY lấy cùng ticket-key.txt. Relay URL và flag false đã được chuẩn bị riêng; chỉ bật sau qualification. Không đưa khóa sang Preview.
