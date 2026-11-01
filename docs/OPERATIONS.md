@@ -296,3 +296,7 @@ Notes cùng thủ tục khôi phục. Đây là backlog, không tự tạo lịc
 
 
 
+
+Duplicate scanner metadata fix (2026-11-02): see docs/DUPLICATES.md. NAS reinstall
+required; unknown sizes remain explicitly unknown and excluded from cleanup. Resume
+retains completed directory checkpoints. No scan or cleanup starts during installation.

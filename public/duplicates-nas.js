@@ -46,7 +46,7 @@
     const result=await request('groups',{scanId:ident,offset});
     if(stamp!==epoch||scan?.id!==ident)return;
     $('nas-scan-results').hidden=false;
-    if(offset===0&&!result.groups.length){const p=document.createElement('p');p.textContent='Không tìm thấy nhóm trùng có checksum phù hợp.';$('nas-scan-groups').append(p);}
+    if(offset===0&&!result.groups.length){const p=document.createElement('p');p.textContent='Không tìm thấy nhóm trùng trong các file đủ metadata để đối chiếu.';$('nas-scan-groups').append(p);}
     for(const group of result.groups){
       const details=document.createElement('details');details.className='duplicate-group';
       const summary=document.createElement('summary');summary.textContent=`${group.copies} bản · ${bytes(group.size)}/file · dư ${bytes(group.size*(group.copies-1))}`;details.append(summary);
@@ -75,8 +75,9 @@
   async function render(result){
     scan=result.scan||null;controls();
     if(!scan){$('nas-scan-progress').textContent='Chưa có lượt quét trên NAS.';clearGroups();return;}
-    $('nas-scan-progress').textContent=`${names[scan.cloud]} / ${scan.path||'(toàn cloud)'} · ${states[scan.state]||scan.state} · ${scan.files.toLocaleString('vi-VN')} file · ${scan.unhashed.toLocaleString('vi-VN')} file thiếu checksum · ${scan.foldersDone}/${scan.foldersDiscovered} thư mục đã biết · cập nhật ${new Date(scan.updatedAt*1000).toLocaleString('vi-VN')}`;
+    $('nas-scan-progress').textContent=`${names[scan.cloud]} / ${scan.path||'(toàn cloud)'} · ${states[scan.state]||scan.state} · ${scan.files.toLocaleString('vi-VN')} file · ${scan.unhashed.toLocaleString('vi-VN')} file chưa đủ metadata để đối chiếu${scan.unknownSize?' (trong đó '+scan.unknownSize.toLocaleString('vi-VN')+' chưa rõ kích thước)':''} · ${scan.foldersDone}/${scan.foldersDiscovered} thư mục đã biết · cập nhật ${new Date(scan.updatedAt*1000).toLocaleString('vi-VN')}`;
     message(scan.error||'NAS đã kết nối. Quét chỉ đọc; dọn cần chọn và xác nhận. Số thư mục có thể tăng khi khám phá.');
+    if(scan.state==='failed'&&$('nas-scan-action').textContent==='Đã tiếp tục lượt quét cũ.')$('nas-scan-action').textContent='Lượt quét đã dừng lại; xem thông báo lỗi ở trên.';
     if(scan.lastCleanup)jobPlan=scan.lastCleanup;
     if(scan.state==='complete'&&groupScan!==scan.id){clearGroups();groupScan=scan.id;try{await groupPage();}catch(error){groupScan=null;message(error.message);}}
     else if(scan.state!=='complete')clearGroups();

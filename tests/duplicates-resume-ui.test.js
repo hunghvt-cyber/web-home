@@ -15,7 +15,7 @@ async function openTab(model){
   const c=m.command;calls.push(c);let result;
   if(c.action==='roots')result={clouds:['gdrive'],version:3,cleanupEnabled:false};
   else if(c.action==='resume'&&model.error){queueMicrotask(()=>this.onmessage({data:JSON.stringify({type:'error',seq:c.seq,error:model.error})}));return;}
-  else{if(c.action==='resume')model.state='running';result={scan:{id:'a'.repeat(32),cloud:'gdrive',path:'Existing',state:model.state,files:10,unhashed:0,foldersDone:1,foldersDiscovered:3,updatedAt:Date.now()/1000}};}
+  else{if(c.action==='resume')model.state='running';result={scan:{id:'a'.repeat(32),cloud:'gdrive',path:'Existing',state:model.state,files:10,unhashed:model.unhashed||0,unknownSize:model.unknownSize||0,error:model.scanError||null,foldersDone:1,foldersDiscovered:3,updatedAt:Date.now()/1000}};}
   queueMicrotask(()=>this.onmessage({data:JSON.stringify({type:'audit',seq:c.seq,requestId:c.id,result})}));
  }}
  w.WebSocket=WS;w.eval(source);
@@ -43,5 +43,15 @@ test('resume error remains visible after background status polling',async()=>{
   assert.match(tab.d.getElementById('nas-scan-action').textContent,/Cấu hình cloud đã đổi/);
   await tab.poll();
   assert.match(tab.d.getElementById('nas-scan-action').textContent,/Cấu hình cloud đã đổi/);
+ }finally{tab.close();}
+});
+test('unknown sizes are explicit and a failed worker replaces stale resume confirmation',async()=>{
+ const model={state:'paused',unhashed:3,unknownSize:2},tab=await openTab(model);
+ try{
+  assert.match(tab.d.getElementById('nas-scan-progress').textContent,/3 file chưa đủ metadata.*2 chưa rõ kích thước/);
+  tab.d.getElementById('nas-scan-resume').click();await tick();await tick();
+  model.state='failed';model.scanError='Metadata sai định dạng';await tab.poll();
+  assert.match(tab.d.getElementById('nas-scan-action').textContent,/Lượt quét đã dừng lại/);
+  assert.match(tab.d.getElementById('nas-scan-message').textContent,/Metadata sai định dạng/);
  }finally{tab.close();}
 });
