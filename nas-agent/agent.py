@@ -28,7 +28,7 @@ class Diagnostics:
         self.lock = threading.RLock()
         self.active = {}
         self.counter = itertools.count(1)
-        self.last_heartbeat = 0
+        self.last_heartbeat = time.monotonic()-60
         self.handler = logging.handlers.RotatingFileHandler(self.path,maxBytes=max_bytes,backupCount=backups,encoding="utf-8")
         self.path.chmod(0o600)
         self.stop_event = threading.Event()
