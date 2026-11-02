@@ -305,3 +305,8 @@ Duplicate scanner directory-ID fix (2026-11-02): NAS reinstall required. Valid r
 Drive shortcut IDs resolve to their target once; shortcut descendants are scan-only.
 Actual missing/malformed IDs remain incomplete. See docs/DUPLICATES.md for migration
 and checkpoint evidence. No cloud data mutation is performed by installation.
+
+Agent diagnostic logging (2026-11-03): metadata-only stage/latency events under
+/vol1/homepage-terminal-admin/diagnostics, approximately 4 MiB total, seven-day
+retention with internal maintenance. Read docs/NAS-TERMINAL.md. Requires NAS reinstall;
+no cloud write, scan, replay or automatic restart is added.
