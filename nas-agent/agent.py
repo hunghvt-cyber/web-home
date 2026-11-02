@@ -2,14 +2,115 @@
 """Outbound-only terminal agent. Content is never written to application logs."""
 import asyncio, base64, collections, fcntl, json, os, pathlib, pty, random, re
 import signal, struct, subprocess, sys, termios
+import contextvars, logging, logging.handlers, threading, time, itertools
 from websockets.asyncio.client import connect
 
 IDENT = re.compile(r'^[a-f0-9]{32}$')
 SOCKET = 'homepage-terminal-v1'
 PREFIX = 'hp_'
 
+TRACE = contextvars.ContextVar("diagnostic_trace", default=None)
+
+class Diagnostics:
+    """Bounded metadata-only log. Never accept messages, payloads or exception text."""
+    def __init__(self, directory, max_bytes=1024*1024, backups=3, retention=7*86400):
+        self.directory = pathlib.Path(directory)
+        self.directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+        if self.directory.is_symlink() or self.directory.stat().st_uid != os.getuid():
+            raise ValueError("Unsafe diagnostic directory")
+        self.directory.chmod(0o700)
+        self.retention = retention
+        self.path = self.directory / "agent.jsonl"
+        for path in [self.path, *[self.directory / ("agent.jsonl."+str(i)) for i in range(1,backups+1)]]:
+            if path.is_symlink() or (path.exists() and (path.stat().st_uid != os.getuid() or not path.is_file())):
+                raise ValueError("Unsafe diagnostic file")
+            if path.exists(): path.chmod(0o600)
+        self.lock = threading.RLock()
+        self.active = {}
+        self.counter = itertools.count(1)
+        self.last_heartbeat = 0
+        self.handler = logging.handlers.RotatingFileHandler(self.path,maxBytes=max_bytes,backupCount=backups,encoding="utf-8")
+        self.path.chmod(0o600)
+        self.stop_event = threading.Event()
+        self.opened = time.time()
+        try:
+            with self.path.open() as stream: first = json.loads(stream.readline(4096)).get("time")
+            if type(first) in (int,float) and 0 < first <= self.opened:self.opened = first
+        except (OSError,ValueError,AttributeError):pass
+        self.prune()
+
+    def event(self, event, **fields):
+        # All values originate in fixed code paths, never caller/provider strings.
+        with self.lock:
+            value = {"time":time.time(),"pid":os.getpid(),"event":event,**fields}
+            record = logging.LogRecord("agent",logging.INFO,"",0,json.dumps(value,separators=(",",":")),(),None)
+            try:
+                self.handler.emit(record)
+                self.path.chmod(0o600)
+            except OSError: pass  # Logging must not break requests.
+
+    def begin(self, command):
+        op = command.get("op")
+        if op not in ("audit","list","create","attach","detach","terminate"): return None
+        action = command.get("action") if op == "audit" else None
+        if action not in ("roots","status","browse","start","pause","resume","groups","files","prepare_cleanup","apply_cleanup","cleanup_status"):
+            action = "other" if op == "audit" else None
+        ident = next(self.counter)
+        with self.lock: self.active[ident] = (time.monotonic(),"received")
+        self.event("received",trace=ident,op=op,action=action)
+        return ident
+
+    def stage(self, ident, stage):
+        if ident is None: return
+        with self.lock:
+            if ident not in self.active: return
+            started,_ = self.active[ident]
+            self.active[ident] = (started,stage)
+        self.event(stage,trace=ident,elapsed_ms=round((time.monotonic()-started)*1000))
+
+    def finish(self, ident):
+        if ident is None:return
+        self.stage(ident,"finished")
+        with self.lock:self.active.pop(ident,None)
+
+    def prune(self):
+        with self.lock:
+            for i in range(1,4):
+                path = self.directory / ("agent.jsonl."+str(i))
+                if path.exists() and not path.is_symlink() and time.time()-path.stat().st_mtime > self.retention:
+                    path.unlink()
+            # Rotate an aged current file so inactive logs also expire.
+            if self.path.exists() and self.path.stat().st_size and (time.time()-self.opened >= min(86400,self.retention) or time.time()-self.path.stat().st_mtime > self.retention):
+                self.handler.doRollover()
+                self.opened = time.time()
+                self.prune()
+
+    def maintain(self):
+        with self.lock: pending = list(self.active.items())
+        for ident,(started,stage) in pending:
+            if time.monotonic()-started >= 20:
+                self.event("slow_request",trace=ident,stage=stage,elapsed_ms=round((time.monotonic()-started)*1000))
+        if time.monotonic()-self.last_heartbeat >= 60:
+            self.event("heartbeat",pending=len(pending),threads=threading.active_count())
+            self.last_heartbeat=time.monotonic()
+        self.prune()
+
+    def maintenance(self):
+        while not self.stop_event.wait(15):
+            try:self.maintain()
+            except OSError:pass
+
+    def start(self):
+        threading.Thread(target=self.maintenance,name="agent-diagnostics",daemon=True).start()
+        self.event("agent_start")
+
+    def close(self):
+        self.stop_event.set()
+        self.handler.close()
+
 class Agent:
-    def __init__(self, send, tmux='tmux', scanner=None):
+    def __init__(self, send, tmux='tmux', scanner=None, diagnostics=None):
+        self.diagnostics = diagnostics
         self.send = send
         self.tmux = tmux
         self.views = {}
@@ -27,7 +128,14 @@ class Agent:
                 if s.startswith(PREFIX) and IDENT.fullmatch(s[len(PREFIX):])]
 
     async def emit(self, cid, **event):
-        await self.send({'type': 'event', 'cid': cid, 'event': event})
+        trace = TRACE.get()
+        if self.diagnostics:self.diagnostics.stage(trace, 'reply_begin')
+        try:
+            await self.send({'type': 'event', 'cid': cid, 'event': event})
+        except Exception:
+            if self.diagnostics:self.diagnostics.stage(trace, 'reply_failed')
+            raise
+        if self.diagnostics:self.diagnostics.stage(trace, 'reply_sent')
 
     async def detach(self, ident):
         view = self.views.pop(ident, None)
@@ -99,7 +207,18 @@ class Agent:
         await self.emit(cid, type='detached', id=ident, reason='Output quá nhanh. Mở lại phiên để tiếp tục.')
 
     async def handle(self, message):
+        command = message.get("command", {})
+        trace = self.diagnostics.begin(command) if self.diagnostics and isinstance(command,dict) else None
+        token = TRACE.set(trace)
+        try:
+            await self._handle(message)
+        finally:
+            if self.diagnostics:self.diagnostics.finish(trace)
+            TRACE.reset(token)
+
+    async def _handle(self, message):
         async with self.lock:
+            if self.diagnostics:self.diagnostics.stage(TRACE.get(), "processing")
             cid = message.get('cid', '')
             if not IDENT.fullmatch(cid): return
             if message.get('type') == 'disconnect':
@@ -161,6 +280,7 @@ class Agent:
                 else: raise ValueError('Thao tác không hợp lệ.')
                 await self.emit(cid, type='ack', seq=seq)
             except Exception as e:
+                if self.diagnostics:self.diagnostics.stage(TRACE.get(), "operation_failed")
                 error = str(e) if isinstance(e, ValueError) else 'Không thực hiện được. Kiểm tra phiên trước khi thử lại.'
                 await self.emit(cid, type='error', seq=seq, error=error)
 
@@ -182,12 +302,18 @@ async def main(config_path):
     lockfd = os.open(lockpath, os.O_CREAT | os.O_RDWR, 0o600)
     try: fcntl.flock(lockfd, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError: raise SystemExit('Agent already running.')
+    diagnostics = Diagnostics(pathlib.Path(__file__).resolve().parent / "diagnostics")
+    diagnostics.start()
     delay = 1
     # Construct once: jobs survive relay/browser disconnects. Agent restart marks checkpoints interrupted.
     from duplicates import load_scanner
-    try: scanner = load_scanner(path.parent.parent / 'homepage-duplicates' / 'config.json')
+    diagnostics.event("scanner_loading")
+    try:
+        scanner = load_scanner(path.parent.parent / 'homepage-duplicates' / 'config.json')
+        diagnostics.event("scanner_ready")
     except Exception:
         scanner = None
+        diagnostics.event("scanner_unavailable")
         print('Duplicate scanner unavailable; terminal remains available. Check scanner configuration locally.', flush=True)
     def terminate_agent(signum, frame):
         if scanner:
@@ -202,7 +328,8 @@ async def main(config_path):
                                max_size=32768, max_queue=16, ping_interval=30, ping_timeout=20,
                                open_timeout=15, close_timeout=5) as ws:
                 async def send(value): await ws.send(json.dumps(value, ensure_ascii=False))
-                agent = Agent(send, scanner=scanner)
+                agent = Agent(send, scanner=scanner, diagnostics=diagnostics)
+                diagnostics.event("relay_connected")
                 delay = 1
                 print('Relay connected.', flush=True)
                 async for raw in ws:
@@ -211,6 +338,7 @@ async def main(config_path):
                     except ValueError: continue
                     if isinstance(value, dict): await agent.handle(value)
         except Exception:
+            diagnostics.event("relay_disconnected")
             print('Relay disconnected; reconnecting. Shell sessions are retained.', flush=True)
         finally:
             if agent: await agent.close()

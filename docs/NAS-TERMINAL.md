@@ -107,3 +107,32 @@ copyout 'systemctl --user disable --now homepage-terminal.service'
 NAS từng báo không đủ quyền đọc journal user; không coi đó là service chết. Dùng is-active và kiểm tra handshake trả mã lỗi, tuyệt đối không in Authorization header/config. HTTP 409 khi thử thêm agent có thể là đã có agent hiện hành; không kết luận key sai. Chỉ có thể kết luận lỗi TLS, HTTP 401 hoặc offline từ bằng chứng cụ thể.
 
 [Lịch sử cài đặt và các trạng thái trước nghiệm thu](history/NAS-TERMINAL-SETUP-20261101.md) được giữ nguyên để đối chiếu, không dùng làm trạng thái hiện hành.
+
+## Diagnostic log bounded retention — 03/11/2026
+
+Agent diagnostics live at /vol1/homepage-terminal-admin/diagnostics/agent.jsonl,
+with three rotated backups. Each file is capped at 1 MiB (a small single-record
+overshoot is possible); total approximately 4 MiB. Directory mode 0700 and files
+0600. Rotation removes oldest backups; maintenance every 15 seconds removes
+files older than seven days, including an inactive current file after rotation.
+Current log also rotates daily even when recent heartbeats update its mtime;
+three backups mean low-volume history is usually three to four days. Seven days
+is an upper age limit, not a promise to retain every event that long.
+No cron, timer, recorder or global journald policy is changed.
+
+Records contain local trace number, PID, fixed operation/action labels and stages:
+received, processing, reply_begin/reply_sent/reply_failed, operation_failed, finished.
+No request IDs, client/session IDs, credentials, shell input/output, file paths,
+provider payloads or exception messages are written. Terminal input/resize are
+not individually logged. Heartbeat runs every minute from a separate daemon thread;
+a request pending over 20 seconds is logged every 15 seconds with its last stage.
+This observes stalls without replaying commands, cancelling writes or auto-restarting.
+reply_sent confirms transport send only, not browser receipt. Missing receive records
+do not alone distinguish browser/relay loss. A process-wide hang can also stop
+heartbeat: these logs narrow diagnosis, not guarantee a root cause.
+
+Owner reported a completed Drive scan (27,340 files, 523 directories, five files
+without usable comparison metadata) and verified one selected duplicate in Drive
+Trash with the unselected copy retained. A later UI timeout recovered after agent
+restart; independent read-only SQLite checks showed scan/cleanup complete, one done
+item. The historical timeout cause is unconfirmed. Diagnostics require NAS reinstall.
