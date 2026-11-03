@@ -1,0 +1,13 @@
+<section id="schedule-panel" aria-labelledby="schedule-heading">
+<link rel="stylesheet" href="/schedules.css">
+<div class="bar"><h2 id="schedule-heading">Lịch tự động hôm nay</h2></div>
+<div class="body">
+<div class="schedule-controls"><span>Giờ Việt Nam · <time id="schedule-date"></time></span><label>Nguồn <select id="schedule-filter"><option value="all">Tất cả</option><option value="github">GitHub Actions</option><option value="nas">NAS</option></select></label><button id="schedule-refresh" type="button">Làm mới</button></div>
+<p id="schedule-summary" role="status">Đang đọc lịch tự động…</p>
+<p id="schedule-coverage" class="muted"></p>
+<div class="schedule-legend">○ Dự kiến · ✓ Thành công · ✕ Lỗi · ◷ Đang chạy · ? Chưa xác minh</div>
+<div id="schedule-timeline" class="schedule-timeline" aria-label="Trục giờ: dự kiến phía trên, thực tế phía dưới"></div>
+<div id="schedule-list" class="schedule-list"></div>
+<p class="muted">GitHub có thể chạy trễ. Chưa thấy lượt chạy không có nghĩa tác vụ đã lỗi. Bấm tác vụ để xem chi tiết.</p>
+</div><script src="/schedules.js" defer></script>
+</section>

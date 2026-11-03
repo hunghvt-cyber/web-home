@@ -1,3 +1,4 @@
+import {createSchedulesHandler} from '../lib/schedules.js';
 import {createDonationsHandler} from '../lib/donations.js';
 import {SNAPSHOT_URL,RUNS_URL,validateProgress,currentRun,boundedJson} from '../lib/backfill-progress.js';
 export function createBackfillProgressHandler({request=fetch,now=Date.now}={}){
@@ -14,7 +15,7 @@ export function createBackfillProgressHandler({request=fetch,now=Date.now}={}){
  };
 }
 export function createPublicProgressHandler(options={}){
- const backfill=createBackfillProgressHandler(options),donations=createDonationsHandler(options);
- return (req,res)=>req.query?.feed==='donations'?donations(req,res):backfill(req,res);
+ const backfill=createBackfillProgressHandler(options),donations=createDonationsHandler(options),schedules=createSchedulesHandler(options);
+ return (req,res)=>req.query?.feed==='schedules'?schedules(req,res):req.query?.feed==='donations'?donations(req,res):backfill(req,res);
 }
 export default createPublicProgressHandler();
