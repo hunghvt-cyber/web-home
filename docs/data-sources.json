@@ -240,10 +240,10 @@
       "authoritative_store": "Google Drive/Photos originals and Koofr destinations/state",
       "writer": "Separate GitHub-hosted backup engines",
       "reader": "Backup runner and owner",
-      "state": "latest_runs_failed_no_new_backup_proof",
+      "state": "see latest_status_override; historical failures are dated",
       "homepage_access": "Sanitized aggregate reports only",
       "directions": {
-        "drive": "Two-way bisync",
+        "drive": "One-way rclone copy; keep destination-only files and old versions",
         "photos": "One-way backup"
       },
       "nas_required": false
@@ -310,14 +310,14 @@
     "secrets": "Only names/locations documented; no values; production secrets not copied into preview",
     "known_gaps": [
       "Dated NO_REPORT and missing Notes backup claims below are historical; see latest_status_override",
-      "Photos daily failure and stale Backfill aggregate; engine recovery not proven",
+      "Photos Daily 2026-11-03 failed; Backfill recovery proved 2026-10-30, latest snapshot 2026-11-02 has 30 pending errors; current run in progress",
       "Supabase Free inactivity pause",
       "Notes authenticated device smoke and production performance not reverified in this documentation update"
     ]
   },
   "migration_document": "docs/QR-KOOFR-20261019.md",
   "latest_status_override": {
-    "as_of": "2026-10-30",
+    "as_of": "2026-11-03",
     "document": "docs/OPERATIONS.md",
     "owner_confirmed_complete": [
       "Expense date correction",
@@ -349,17 +349,29 @@
       "reboot_verified": false
     },
     "report_readback": {
-      "as_of": "2026-10-30T08:11:00+07:00",
+      "as_of": "2026-11-03T13:34:51+07:00",
       "nas_http": 200,
       "gdrive_http": 200,
       "gphotos_http": 200,
       "backfill_http": 200,
-      "gdrive_run": 40970527964,
+      "nas_measured_at": "2026-11-03T06:30:26Z",
+      "root_used_percent": 85.2,
+      "root_available_bytes": 975790080,
+      "vol1_used_percent": 18.7,
+      "retention_state": "pass",
+      "retention_measured_at": "2026-11-02T22:55:52Z",
+      "gdrive_run": 41559728173,
       "gdrive_outcome": "success",
-      "gphotos_run": 40976637785,
+      "gphotos_run": 41565892303,
       "gphotos_outcome": "failure",
-      "backfill_snapshot_date": "2026-10-27",
-      "scope": "Public report readback only; no backup rerun or mutation"
+      "backfill_snapshot_run": 41370319794,
+      "backfill_snapshot_date": "2026-11-02",
+      "backfill_uploaded_total": 15212,
+      "backfill_pending_errors": 30,
+      "backfill_snapshot_outcome": "failure",
+      "backfill_current_run": 41570039268,
+      "backfill_current_status": "in_progress",
+      "scope": "Read-only public telemetry; no direct SSH, authenticated smoke, backup rerun or mutation"
     },
     "backup_repositories": {
       "as_of": "2026-10-31",
@@ -372,7 +384,8 @@
         "id": 1336978361
       },
       "warning": "backup-drive is a historical Photos name now reused by Drive; never use it for current Photos reads"
-    }
+    },
+    "system_map": "https://github.com/hunghvt-cyber/nas-admin/blob/main/SYSTEMS-CURRENT.md"
   },
   "latest_status_override_history": [
     {
@@ -419,6 +432,64 @@
         "publisher_mount_gate": true,
         "publisher_cloud_ack_after_move_verified": false,
         "reboot_verified": false
+      }
+    },
+    {
+      "as_of": "2026-10-30",
+      "document": "docs/OPERATIONS.md",
+      "owner_confirmed_complete": [
+        "Expense date correction",
+        "Drive/Photos backup reports and transfer metrics",
+        "Notes folder sharing UX",
+        "Homepage/Home-AI navigation and compact model controls"
+      ],
+      "qr_live_evidence": "docs/results/qr-koofr-activation-20261021.json",
+      "qr_status": "Koofr active after verified six-guide import and live adapter save/reopen; owner approved Git originals",
+      "historical_snapshot_note": "Dated inventory and previous overrides retain their measurement scope. Current Notes data is Firestore; Koofr is its backup destination. GAS/Drive is for reports only. Older NO_REPORT fields are historical; report HTTP 200 does not prove backup success.",
+      "shared_password": {
+        "authority": "Homepage",
+        "notes_store": "Firebase Firestore",
+        "separate_sessions": true,
+        "sso": false,
+        "rollout_document": "docs/SHARED-PASSWORD-DECISION-20261026.md",
+        "owner_acceptance_date": "2026-10-27",
+        "owner_acceptance_scope": "Shared login and password-version session revocation item marked OK in conversation; not a new AI authenticated smoke test"
+      },
+      "nas_tools": {
+        "document": "https://github.com/hunghvt-cyber/0219nas-aio/blob/main/NAS-STORAGE-20261027.md",
+        "source": "owner-provided host output",
+        "root_after": {
+          "used_percent": 74,
+          "free_df": "1.6G"
+        },
+        "publisher_mount_gate": true,
+        "publisher_cloud_ack_after_move_verified": false,
+        "reboot_verified": false
+      },
+      "report_readback": {
+        "as_of": "2026-10-30T08:11:00+07:00",
+        "nas_http": 200,
+        "gdrive_http": 200,
+        "gphotos_http": 200,
+        "backfill_http": 200,
+        "gdrive_run": 40970527964,
+        "gdrive_outcome": "success",
+        "gphotos_run": 40976637785,
+        "gphotos_outcome": "failure",
+        "backfill_snapshot_date": "2026-10-27",
+        "scope": "Public report readback only; no backup rerun or mutation"
+      },
+      "backup_repositories": {
+        "as_of": "2026-10-31",
+        "drive": {
+          "repository": "hunghvt-cyber/backup-drive",
+          "id": 1191594464
+        },
+        "photos": {
+          "repository": "hunghvt-cyber/backup-photos-",
+          "id": 1336978361
+        },
+        "warning": "backup-drive is a historical Photos name now reused by Drive; never use it for current Photos reads"
       }
     }
   ]
