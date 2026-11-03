@@ -1,5 +1,5 @@
 """Metadata-only inventory. Never export cron commands, environment or log bodies."""
-import argparse, base64, datetime as dt, hashlib, json, os, pathlib, subprocess, urllib.request
+import argparse, base64, datetime as dt, hashlib, json, os, pathlib, subprocess, urllib.request, urllib.error
 from zoneinfo import ZoneInfo
 from croniter import croniter
 import yaml
@@ -36,9 +36,16 @@ def github():
         name=repo['full_name']
         try:
             workflows=pages(f'repos/{name}/actions/workflows','workflows')
-            for workflow in workflows:
+        except Exception as exc:
+            errors.append(name+":workflow-list:"+type(exc).__name__);continue
+        for workflow in workflows:
+            try:
                 if not workflow['path'].startswith('.github/workflows/'):continue
-                raw=api(f'repos/{name}/contents/{workflow["path"]}?ref={repo["default_branch"]}')
+                try:
+                    raw=api(f'repos/{name}/contents/{workflow["path"]}?ref={repo["default_branch"]}')
+                except urllib.error.HTTPError as exc:
+                    if exc.code==404:continue
+                    raise
                 data=yaml.safe_load(base64.b64decode(raw['content'])) or {}
                 trigger=data.get('on',data.get(True,{}))
                 schedules=trigger.get('schedule',[]) if isinstance(trigger,dict) else []
@@ -56,7 +63,8 @@ def github():
                     job['runs'].append({'id':str(run['id'])+':'+str(run.get('run_attempt',1)),'started_at':begin,'finished_at':run['updated_at'] if run['status']=='completed' else None,'state':run['conclusion'] if run['status']=='completed' else run['status'],'event':run['event'],'url':run['html_url']})
                 job['runs'].sort(key=lambda r:r['started_at'])
                 jobs.append(job)
-        except Exception: errors.append(name) # no upstream body or credentials
+            except Exception as exc:
+                errors.append(name+":"+str(workflow["id"])+":"+type(exc).__name__+str(getattr(exc,"code","")))
     return jobs,{'repos_discovered':len(repos),'incomplete_repositories':errors,'scope':'Public non-fork repositories; default branches only'}
 def command(args):
     r=subprocess.run(args,capture_output=True,text=True,timeout=15)
