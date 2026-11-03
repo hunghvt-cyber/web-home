@@ -15,3 +15,11 @@ test('UI renders actual failures, source gaps, filter and safe text',async()=>{
  assert.match(w.document.getElementById('schedule-coverage').textContent,/NAS: chưa kết nối/);assert.match(w.document.getElementById('schedule-list').textContent,/Lỗi/);assert.equal(w.document.querySelector('#schedule-list img'),null);
  w.document.getElementById('schedule-filter').value='nas';w.document.getElementById('schedule-filter').dispatchEvent(new w.Event('change'));assert.match(w.document.getElementById('schedule-list').textContent,/Chưa có lịch/);} finally {w.close();}
 });
+test('OS timers are collapsed, business system timers stay on timeline, errors remain visible',async()=>{
+ const dom=new JSDOM(fs.readFileSync('scripts/templates/schedules.html','utf8'),{runScripts:'outside-only'}),w=dom.window;
+ const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Ho_Chi_Minh',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+ const template=validateSnapshot(fixture(),'github').jobs[0];
+ const jobs=['apt-daily.timer','tapo-verified-retention.timer'].map(name=>({...template,name,id:name,source:'nas',group:'system timer'}));
+ w.fetch=async()=>({ok:true,json:async()=>({sources:[{source:'nas',available:true,date:today,measured_at:new Date().toISOString(),jobs}]})});w.AbortSignal.timeout=()=>undefined;
+ try{w.eval(fs.readFileSync('public/schedules.js','utf8'));await new Promise(r=>setTimeout(r,20));assert.match(w.document.getElementById('schedule-system-list').textContent,/apt-daily/);assert.doesNotMatch(w.document.getElementById('schedule-list').textContent,/apt-daily/);assert.match(w.document.getElementById('schedule-list').textContent,/tapo-verified/);assert.equal(w.document.getElementById('schedule-system').open,false);assert.match(w.document.getElementById('schedule-system-warning').textContent,/1 lượt hệ thống báo lỗi/);assert.ok([...w.document.querySelectorAll('#schedule-timeline button')].every(b=>!b.title.includes('apt-daily')));}finally{w.close();}
+});
