@@ -1,5 +1,38 @@
 # Vận hành Homepage — cửa vào hiện hành
 
+## Đọc Production Homepage — 03/11/2026 khoảng 13:30–13:35 +07
+
+Đọc HTTP trực tiếp các endpoint công khai; tất cả trả 200. Không đăng nhập,
+không gọi API ghi, không đọc Notes hoặc dữ liệu file riêng tư.
+Feed NAS là telemetry do publisher gửi, không phải SSH kiểm tra host độc lập.
+
+| Nguồn | Mốc dữ liệu +07 | Kết quả |
+| --- | --- | --- |
+| /api/nas-report | 03/11 13:30:26, nhận 13:30:41 | cam1/cam2/NAS state=ok; recovered_previous=false |
+| NAS health | cùng snapshot | root 85,2%, available 975.790.080 byte (~931 MiB); vol1 18,7%, available 406.679.224.320 byte; RAM available 1.802.579.968 byte |
+| Maintenance | 03/11 02:32:04 | state=pass |
+| Retention | 03/11 05:55:52 | state=pass; không có chi tiết staging/journal trong feed |
+| Drive Daily | kết thúc 03/11 08:36:52 | run 41559728173 success, ignored_count=28, cảnh báo shortcut hỏng |
+| Photos Daily | kết thúc 03/11 09:56:42 | run 41565892303 failure; metrics null, chưa xác định pha lỗi |
+| Backfill snapshot | 02/11 13:02:05 | run 41370319794 outcome=failure; attempted 1.480, uploaded 1.478, errors 2; uploaded_total 15.212, pending_seen 37.580, pending_errors 30, inventoried_total 52.821, inventory_complete=true |
+| Backfill current | checked 03/11 13:34:51 | run 41570039268 in_progress, bắt đầu 10:05:09; không gán số snapshot cũ cho lượt này |
+
+Trang / trả HTTP 200. HTTP 200 của feed không đồng nghĩa backup PASS:
+Photos Daily và snapshot Backfill vẫn failure. inventory_complete=true là
+kết quả enumeration của worker, không chứng minh backup đủ thư viện.
+
+Feed mới thay thế nhận định dung lượng 34%/retention bị chặn 27/10 ở cấp trạng thái
+tổng hợp: vol1 đã đạt vùng mục tiêu ~20%, retention mới báo PASS.
+Chưa có evidence per-file/reconciliation để khẳng định staging cũ được xử lý thế nào.
+Root tăng so với checkpoint 74% ngày 27/10, cần kiểm tra phân bổ dung lượng chỉ đọc;
+không tự dọn cache/log/kernel hoặc chuyển thêm công cụ.
+Pending errors mới là 30 thay cho 198 tại canary 30/10, chưa chứng minh toàn bộ
+198 lỗi cũ đã sửa hoặc mỗi lỗi còn lại có cùng nguyên nhân.
+
+Nguồn tổng hợp: [nas-admin hiện hành](https://github.com/hunghvt-cyber/nas-admin/blob/main/SYSTEMS-CURRENT.md).
+Drive hiện là copy một chiều theo [cutover 01/11](https://github.com/hunghvt-cyber/backup-drive/blob/main/docs/DRIVE-SOURCE-COPY-20261101.md).
+Các mục cũ dưới đây giữ phạm vi thời điểm; nghiệm thu file trùng được người dùng báo cáo mới hơn nằm trong docs/NAS-TERMINAL.md.
+
 ## Dọn file trùng — 01/11/2026
 
 Mục nhỏ trên Homepage mở `/don-file-trung/` ở tab mới. Bộ quét NAS chỉ đọc được
