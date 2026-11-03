@@ -12,3 +12,4 @@ terminal-relay/.wrangler/
 # Private duplicate inventories
 audit/
 *-inventory.json
+.schedule-venv/
