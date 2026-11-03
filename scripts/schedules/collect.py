@@ -48,7 +48,7 @@ def github():
                     expr=s.get('cron',''); zone=ZoneInfo(s.get('timezone','UTC'))
                     job['schedule'].append(expr+' · '+str(zone))
                     if job['enabled']:job['planned'].extend(occurrences(expr,zone))
-                runs=pages(f'repos/{name}/actions/workflows/{workflow["id"]}/runs?created={START.astimezone(dt.timezone.utc).isoformat()}..{END.astimezone(dt.timezone.utc).isoformat()}','workflow_runs')
+                runs=pages(f'repos/{name}/actions/workflows/{workflow["id"]}/runs?created={START.astimezone(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}..{END.astimezone(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}','workflow_runs')
                 for run in runs:
                     if run['head_branch']!=repo['default_branch']:continue
                     begin=run.get('run_started_at') or run['created_at']
