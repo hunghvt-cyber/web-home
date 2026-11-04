@@ -177,6 +177,10 @@
   },
   "rewrites": [
     {
+      "source": "/notes/",
+      "destination": "https://hunghvt-notes.vercel.app/"
+    },
+    {
       "source": "/notes",
       "destination": "https://hunghvt-notes.vercel.app/"
     },
