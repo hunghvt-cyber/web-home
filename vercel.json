@@ -174,5 +174,15 @@
     "api/auth.js": {
       "maxDuration": 60
     }
-  }
+  },
+  "rewrites": [
+    {
+      "source": "/notes",
+      "destination": "https://hunghvt-notes.vercel.app/"
+    },
+    {
+      "source": "/notes/:path*",
+      "destination": "https://hunghvt-notes.vercel.app/:path*"
+    }
+  ]
 }

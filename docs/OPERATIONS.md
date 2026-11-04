@@ -1,3 +1,9 @@
+## Đăng nhập tập trung — 04/11/2026
+
+Notes owner dùng phiên Homepage tại `/notes/`; mở/khóa/đổi mật khẩu quản lý tại
+Homepage. Thiết kế và phạm vi kiểm chứng ở [hồ sơ phiên chung](NOTES-CENTRAL-SESSION-20261104.md).
+Các mô tả hai phiên riêng ở hồ sơ cũ được giữ làm lịch sử.
+
 # Vận hành Homepage — cửa vào hiện hành
 
 ## Đọc Production Homepage — 03/11/2026 khoảng 13:30–13:35 +07
