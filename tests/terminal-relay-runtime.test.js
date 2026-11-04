@@ -14,5 +14,17 @@ test('actual Workers runtime authenticates browser and relays input/output to ou
   browser.send(JSON.stringify({type:'auth',token:ticket({key,url:'wss://relay.test/connect'}).token}));assert.deepEqual(await browserNext(),{type:'ready',online:true});
   const id='a'.repeat(32);browser.send(JSON.stringify({type:'command',command:{op:'input',id,seq:1,data:'pwd\r'}}));const c=await agentNext();assert.equal(c.command.data,'pwd\r');
   agent.send(JSON.stringify({type:'event',cid:c.cid,event:{type:'output',id,data:'dGVzdA=='}}));assert.equal((await browserNext()).data,'dGVzdA==');
+  const conflict=await mf.dispatchFetch('https://relay.test/connect',{headers:{Upgrade:'websocket',Authorization:'Bearer '+agentKey}});
+  assert.equal(conflict.status,409,'legacy probes cannot replace the agent');
+  const denied=await mf.dispatchFetch('https://relay.test/connect',{headers:{Upgrade:'websocket',Authorization:'Bearer wrong','X-NAS-Agent-Reconnect':'replace'}});
+  assert.equal(denied.status,401,'replacement flag never bypasses authentication');
+  const retired=agent,closed=new Promise(resolve=>retired.addEventListener('close',resolve,{once:true}));
+  const replacement=await mf.dispatchFetch('https://relay.test/connect',{headers:{Upgrade:'websocket',Authorization:'Bearer '+agentKey,'X-NAS-Agent-Reconnect':'replace'}});
+  assert.equal(replacement.status,101);agent=replacement.webSocket;agent.accept();const nextReplacement=inbox(agent);
+  assert.equal((await browserNext()).type,'online');await closed;
+  browser.send(JSON.stringify({type:'command',command:{op:'input',id,seq:2,data:'next\r'}}));
+  const next=await nextReplacement();assert.equal(next.command.seq,2,'previous input is never replayed');
+  agent.send(JSON.stringify({type:'event',cid:next.cid,event:{type:'output',id,data:'new'}}));
+  assert.equal((await browserNext()).data,'new','retired close does not announce replacement offline');
  }finally{browser?.close();agent?.close();await mf.dispose();}
 });

@@ -63,3 +63,14 @@ test('clipboard edge whitespace is normalized consistently and internal whitespa
  assert.throws(()=>terminalConfig({...env,NAS_TERMINAL_TICKET_KEY:'x'.repeat(31)+'\n'}),{status:503});
  assert.throws(()=>terminalConfig({...env,NAS_TERMINAL_TICKET_KEY:'x'.repeat(32)+' '+'y'.repeat(32)}),{status:503});
 });
+
+test('retired agent cannot route stale output or announce a live successor offline',async()=>{
+ const retired=socket({role:'retired'}),agent=socket({role:'agent'}),browser=socket({role:'browser',cid:id,exp:Date.now()+60000});
+ const ctx={getWebSockets:()=>[retired,agent,browser],storage:{setAlarm:async()=>{},deleteAlarm:async()=>{}}};
+ const room=new TerminalRoom(ctx,{});
+ await room.webSocketMessage(retired,JSON.stringify({type:'event',cid:id,event:{type:'output',data:'stale'}}));
+ await room.webSocketClose(retired);
+ assert.deepEqual(browser.messages,[]);
+ const staleClose=socket({role:'agent'});staleClose.readyState=3;
+ await room.webSocketClose(staleClose);assert.deepEqual(browser.messages,[]);
+});

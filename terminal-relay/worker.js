@@ -25,10 +25,15 @@ export class TerminalRoom{
  sockets(role){return this.ctx.getWebSockets().filter(s=>s.readyState===1&&s.deserializeAttachment()?.role===role);}
  async fetch(req){
   const role=req.headers.has('Authorization')?'agent':'pending';
-  if((role==='agent'&&this.sockets('agent').length)||(role==='pending'&&this.ctx.getWebSockets().length>=9))return new Response('Connection limit',{status:409});
+  const previous=role==='agent'?this.sockets('agent'):[];
+  const replace=role==='agent'&&req.headers.get('X-NAS-Agent-Reconnect')==='replace';
+  if((previous.length&&!replace)||(role==='pending'&&this.ctx.getWebSockets().length>=9))return new Response('Connection limit',{status:409});
   const pair=new WebSocketPair(),[client,server]=Object.values(pair);
   this.ctx.acceptWebSocket(server);
   server.serializeAttachment({role,exp:role==='pending'?Date.now()+5000:null});
+  // Only authenticated agents reach this branch. Accept the successor before retiring
+  // old sockets, and revoke their role before close callbacks/messages can run.
+  for(const old of previous){old.serializeAttachment({role:'retired',exp:null});old.close(1000,'Agent reconnected');}
   await this.schedule();
   if(role==='agent')for(const ws of this.sockets('browser'))send(ws,{type:'online'});
   return new Response(null,{status:101,webSocket:client});
@@ -70,7 +75,7 @@ export class TerminalRoom{
  }
  async webSocketClose(ws){
   const s=ws.deserializeAttachment();
-  if(s?.role==='agent')for(const b of this.sockets('browser'))send(b,{type:'offline'});
+  if(s?.role==='agent'&&!this.sockets('agent').length)for(const b of this.sockets('browser'))send(b,{type:'offline'});
   if(s?.role==='browser'){const a=this.sockets('agent')[0];if(a)send(a,{type:'disconnect',cid:s.cid});}
   await this.schedule();
  }

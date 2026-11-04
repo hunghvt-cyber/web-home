@@ -136,3 +136,29 @@ without usable comparison metadata) and verified one selected duplicate in Drive
 Trash with the unselected copy retained. A later UI timeout recovered after agent
 restart; independent read-only SQLite checks showed scan/cleanup complete, one done
 item. The historical timeout cause is unconfirmed. Diagnostics require NAS reinstall.
+
+## Reconnect conflict recovery — 04/11/2026
+
+Owner diagnostics: agent active (~43 MiB service memory), pending=0, repeated
+relay_disconnected events; an authenticated handshake probe returned HTTP 409.
+Worker code rejects a second agent while an old socket remains OPEN. This establishes
+a connection-slot conflict, not a SQLite/scan failure. Logs do not prove why the old
+socket survived or rule out a second independently configured agent.
+
+The NAS agent now sends X-NAS-Agent-Reconnect: replace on its authenticated handshake.
+After validating the existing agent key, the relay accepts the successor, marks all
+previous agent sockets retired, then closes them. Retired sockets cannot route events
+or emit offline over the live successor. A request without that header retains HTTP
+409, and a wrong key remains HTTP 401. Browser headers cannot grant the agent role.
+This intentionally allows a holder of the agent credential to supersede its prior
+connection; the NAS process singleton lock stays in place. No new credentials,
+request replay, scan/cleanup restart, timers, or Worker heartbeat traffic are added.
+Existing tmux sessions and scanner jobs survive relay replacement; browser terminal
+renderers may need to attach again. Agent log now includes exception class, numeric
+HTTP status/close code and retry delay, excluding error strings or response bodies.
+
+Deploy relay first through the existing production workflow, then update NAS with
+the pinned installer. An old agent remains compatible; the NAS upgrade activates
+replacement recovery. Runtime fixtures verify a real Worker websocket replacement,
+legacy conflict, wrong-key refusal, new routing and no duplicate command delivery.
+Live NAS recovery still requires owner-installed updated agent and a page request.
