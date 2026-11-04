@@ -1,3 +1,4 @@
+import notesGateway from '../lib/notes-gateway.js';
 import terminalApi from '../lib/terminal-api.js';
 import duplicatesApi from '../lib/duplicates-api.js';
 import notesAuthService from '../lib/notes-auth-service.js';
@@ -7,6 +8,7 @@ import {passwords} from '../lib/password-store.js';
 export function createAuthHandler({limit=checkAttempts,passwordStore=passwords}={}) {
  return async function handler(req,res){
   try{
+   if(req.query?.service==='notes-app')return notesGateway(req,res);
    if(req.query?.service==='terminal')return terminalApi(req,res);
    if(req.query?.service==='duplicates')return duplicatesApi(req,res);
    if(req.query?.service==='notes')return notesAuthService(req,res);

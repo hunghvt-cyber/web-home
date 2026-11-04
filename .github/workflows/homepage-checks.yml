@@ -29,6 +29,6 @@ jobs:
       - run: python -m unittest discover -s tests -p 'test_duplicates*.py'
       - run: bash -n nas-agent/install.sh && node --check terminal-relay/worker.js && node --check public/nas-terminal.js
       - run: node --check public/guides.js && node --check api/notes.js && node --check lib/validation.js
-      - run: test -f dist/notes/index.html && test -f dist/gemini/index.html
-      - run: grep -q 'hunghvt-notes.vercel.app' dist/notes/index.html && grep -q 'home-gemini' dist/index.html
+      - run: test ! -f dist/notes/index.html && test -f dist/gemini/index.html
+      - run: grep -q 'home-gemini' dist/index.html
 
