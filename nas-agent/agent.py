@@ -324,7 +324,7 @@ async def main(config_path):
     while True:
         agent = None
         try:
-            async with connect(cfg['relay_url'], additional_headers={'Authorization':'Bearer '+cfg['agent_key']},
+            async with connect(cfg['relay_url'], additional_headers={'Authorization':'Bearer '+cfg['agent_key'],'X-NAS-Agent-Reconnect':'replace'},
                                max_size=32768, max_queue=16, ping_interval=30, ping_timeout=20,
                                open_timeout=15, close_timeout=5) as ws:
                 async def send(value): await ws.send(json.dumps(value, ensure_ascii=False))
@@ -337,8 +337,13 @@ async def main(config_path):
                     try: value = json.loads(raw)
                     except ValueError: continue
                     if isinstance(value, dict): await agent.handle(value)
-        except Exception:
-            diagnostics.event("relay_disconnected")
+        except Exception as error:
+            status = getattr(getattr(error,"response",None),"status_code",None)
+            code = getattr(getattr(error,"rcvd",None),"code",None)
+            diagnostics.event("relay_disconnected",error_type=type(error).__name__,
+                              http_status=status if type(status) is int else None,
+                              close_code=code if type(code) is int else None,
+                              retry_seconds=delay)
             print('Relay disconnected; reconnecting. Shell sessions are retained.', flush=True)
         finally:
             if agent: await agent.close()

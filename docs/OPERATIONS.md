@@ -349,3 +349,8 @@ Agent diagnostic logging (2026-11-03): metadata-only stage/latency events under
 /vol1/homepage-terminal-admin/diagnostics, approximately 4 MiB total, seven-day
 retention with internal maintenance. Read docs/NAS-TERMINAL.md. Requires NAS reinstall;
 no cloud write, scan, replay or automatic restart is added.
+
+Relay reconnect recovery (2026-11-04): see docs/NAS-TERMINAL.md. Authenticated new
+NAS connections explicitly supersede old agent sockets, resolving HTTP 409 loops.
+Deploy existing relay workflow then install updated NAS agent. No keys, cloud data,
+scan checkpoints or background sync services are changed.

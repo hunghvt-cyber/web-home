@@ -85,6 +85,7 @@ def main():
     print('METADATA_SIZE_FIX=enabled; unknown-size files are counted and excluded from cleanup.')
     print('DRIVE_FOLDER_ID_FIX=enabled; directory shortcuts scanned once by target ID; alias descendants are scan-only.')
     print('AGENT_DIAGNOSTICS=enabled; max 4 MiB; retention 7 days; metadata only.')
+    print('AGENT_RECONNECT=replace_authenticated_connection; relay upgrade required.')
     print('No scan or cleanup started by installation. No cloud data changed. Keys preserved.')
 
 
