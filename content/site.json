@@ -15,6 +15,11 @@
       "label": "FnNAS",
       "description": "Quản lý NAS - Chỉ dành cho MVP",
       "url": "http://100.94.158.94:5666/"
+    },
+    {
+      "label": "Super Agent",
+      "description": "Điều phối công việc AI · Cần kết nối Tailscale",
+      "url": "http://100.94.158.94:8765/"
     }
   ],
   "base_url": "https://homepage-nas.vercel.app",
