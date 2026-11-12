@@ -1,5 +1,15 @@
 # Homepage AIO status feed
 
+## Quick read
+
+- **Purpose:** publish a small, allowlisted NAS status snapshot for Homepage. The publisher reads existing monitoring/maintenance evidence; it does not start another NAS scan.
+- **Retention input:** the parser reads the coordinator aggregate `state/retention-auto/latest.json` and verifies only result files referenced by that aggregate.
+- **Important limitation:** a standalone APPLY result that is not referenced by the aggregate is invisible to this parser. Therefore Homepage can show `unknown` even when a separate APPLY result has independently passed verification.
+- **Nov 12 audit finding:** the standalone 500-file APPLY result was PASS, but the Nov 11 aggregate did not reference it; the local snapshot consequently showed retention `unknown`.
+- **Runtime distinction:** the NAS host was running the publisher from a separate `Homepage-nas` checkout using the GAS/Drive backend. This repository documents the canonical `web-home` implementation; do not assume this exact checkout or transport is installed on the NAS.
+
+## Publisher design
+
 Implemented a Python publisher that reads the existing 15-second FnNAS monitoring cache and the last maintenance summary. It does not start another NAS scan or include collector payloads in the upload. The allowlisted schema contains only `schema`, source `updated_at`, camera/NAS states, maintenance/retention states with their own measurement time, and minimal filesystem, RAM, and swap metrics. Missing, invalid, failed, or older-than-15-minute health measurements become `null`; schema version remains 1 and the UI accepts older payloads without `health`.
 
 ## Publishing
