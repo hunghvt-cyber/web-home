@@ -219,7 +219,16 @@ def _candidate_identity(report, expected_root, policy, start, end):
     return start <= created <= end
 
 
-def _matching_candidate_ids(results_root, expected_root, policy, start, end):
+def _matching_candidate_ids(
+    results_root,
+    expected_root,
+    policy,
+    start,
+    end,
+    current_evidence=False,
+    expected_file_count=None,
+    expected_byte_count=None,
+):
     matches = []
     try:
         children = list(results_root.iterdir())
@@ -235,8 +244,16 @@ def _matching_candidate_ids(results_root, expected_root, policy, start, end):
             report = json.loads(result_path.read_text(encoding="utf-8"))
         except (OSError, UnicodeError, json.JSONDecodeError):
             continue
-        if _candidate_identity(report, expected_root, policy, start, end):
-            matches.append(child.name)
+        if not _candidate_identity(report, expected_root, policy, start, end):
+            continue
+        if current_evidence:
+            try:
+                file_count, byte_count = _validate_archived_rows(report, current_evidence=True)
+            except ReconcileError:
+                continue
+            if (file_count, byte_count) != (expected_file_count, expected_byte_count):
+                continue
+        matches.append(child.name)
     return matches
 
 
@@ -269,6 +286,7 @@ def build_reconciled_aggregate(
     expected_aggregate_sha256,
     now=None,
     current_evidence=False,
+    expected_result_sha256=None,
 ):
     """Return a new aggregate plus safe evidence metadata; never writes files."""
     require(SHA256_RE.fullmatch(expected_aggregate_sha256 or "") is not None, "expected_aggregate_hash_invalid")
@@ -276,6 +294,14 @@ def build_reconciled_aggregate(
     require(aggregate_hash == expected_aggregate_sha256, "aggregate_changed_since_review")
     results_root, result_path = resolve_result_path(results_root, result_id)
     result, result_hash = load_hashed_object(result_path, "result_invalid")
+    if current_evidence:
+        require(
+            isinstance(expected_result_sha256, str) and bool(expected_result_sha256),
+            "expected_result_sha256_missing",
+        )
+        require(SHA256_RE.fullmatch(expected_result_sha256) is not None,
+                "expected_result_sha256_invalid")
+        require(result_hash == expected_result_sha256, "result_hash_mismatch")
 
     # A repeat of the exact successful reconciliation is a byte-preserving no-op.
     existing_ref = report.get("reconciliation", {}).get("source_result") if isinstance(report.get("reconciliation"), dict) else None
@@ -319,7 +345,16 @@ def build_reconciled_aggregate(
     verification = _collect_current_evidence(expected_root, now) if current_evidence else None
     if not current_evidence:
         _validate_evidence_signatures(result, expected_root)
-    candidates = _matching_candidate_ids(results_root, expected_root, target["policy"], started, window_end)
+    candidates = _matching_candidate_ids(
+        results_root,
+        expected_root,
+        target["policy"],
+        started,
+        window_end,
+        current_evidence=current_evidence,
+        expected_file_count=file_count if current_evidence else None,
+        expected_byte_count=byte_count if current_evidence else None,
+    )
     require(candidates == [result_id], "result_candidate_ambiguous_or_mismatched")
 
     reconciled = deepcopy(report)
@@ -417,6 +452,8 @@ def main(argv=None):
     parser.add_argument("--result-id", required=True)
     parser.add_argument("--expected-root", required=True)
     parser.add_argument("--expected-aggregate-sha256", required=True)
+    parser.add_argument("--expected-result-sha256",
+                        help="pin the requested result file when using --current-evidence")
     parser.add_argument("--apply", action="store_true", help="write the reviewed aggregate pointer; default is read-only")
     parser.add_argument("--current-evidence", action="store_true",
                         help="explicitly verify the result using current source-file stat evidence")
@@ -429,6 +466,7 @@ def main(argv=None):
             args.expected_root,
             args.expected_aggregate_sha256,
             current_evidence=args.current_evidence,
+            expected_result_sha256=args.expected_result_sha256,
         )
         if args.apply and summary["outcome"] == "READY_TO_ADOPT":
             result_path = resolve_result_path(args.results_root, args.result_id)[1]

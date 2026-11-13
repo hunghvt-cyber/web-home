@@ -17,7 +17,14 @@ historical contents of those source files.
 ## Validation contract
 
 The mode requires all existing aggregate identity, policy, root, candidate,
-result hash, timestamp/window, prior-job hash, and lock/backup checks. It also
+result hash, timestamp/window, prior-job hash, and lock/backup checks. Supply
+`--expected-result-sha256` to pin the explicitly requested result file; the
+reconciler rejects a missing, malformed, or mismatched pin. Candidate discovery
+in this mode also validates each broad-identity candidate's complete row proof
+and exact byte total before treating it as competing. A candidate with another
+total is not eligible for this requested result; multiple fully qualifying
+candidates still fail closed. Historical mode retains its original broad
+identity ambiguity behavior. The mode also
 requires exactly 500 result rows; each row must be fully applied, have a unique
 nonempty remote ID, a nonnegative five-integer stat tuple, a remote size equal
 to `stat[2]`, and matching valid lowercase SHA-256 values for local and remote
@@ -51,6 +58,7 @@ python3 scripts/reconcile_retention_aggregate.py \
   --result-id run-EXPECTED_ID \
   --expected-root /verified/archive/root \
   --expected-aggregate-sha256 EXPECTED_AGGREGATE_SHA256 \
+  --expected-result-sha256 EXPECTED_RESULT_SHA256 \
   --current-evidence
 ```
 
