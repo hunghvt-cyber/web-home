@@ -11,9 +11,23 @@ var NasReportSchema = (function () {
     keys(d,'schema|updated_at|cam1|cam2|nas|health|maintenance|retention');
     check(d.schema === 1 && (d.updated_at === null || stamp(d.updated_at)));
     ['cam1','cam2','nas','maintenance','retention'].forEach(function(k) {
-      keys(d[k],k === 'maintenance' || k === 'retention' ? 'state|measured_at' : 'state');
+      if (k === 'retention') {
+        check(d[k] && typeof d[k] === 'object' && !Array.isArray(d[k]));
+        check(Object.keys(d[k]).every(function(key) {
+          return ['state','measured_at','result_ref','file_count','byte_count'].indexOf(key) >= 0;
+        }));
+        check(['state','measured_at'].every(function(key) { return Object.prototype.hasOwnProperty.call(d[k], key); }));
+      } else {
+        keys(d[k],k === 'maintenance' ? 'state|measured_at' : 'state');
+      }
       check(['ok','pass','warn','fail','unknown'].indexOf(d[k].state) >= 0);
       if (k === 'maintenance' || k === 'retention') check(d[k].measured_at === null || stamp(d[k].measured_at));
+      if (k === 'retention') {
+        if (Object.prototype.hasOwnProperty.call(d[k], 'result_ref')) check(typeof d[k].result_ref === 'string' && /^run-[A-Za-z0-9_-]{1,80}$/.test(d[k].result_ref));
+        if (Object.prototype.hasOwnProperty.call(d[k], 'file_count')) check(integer(d[k].file_count) && d[k].file_count !== null);
+        if (Object.prototype.hasOwnProperty.call(d[k], 'byte_count')) check(integer(d[k].byte_count) && d[k].byte_count !== null);
+        check(Object.prototype.hasOwnProperty.call(d[k], 'file_count') === Object.prototype.hasOwnProperty.call(d[k], 'byte_count'));
+      }
     });
     keys(d.health,'root|vol1|ram|swap');
     ['root','vol1'].forEach(function(k) {

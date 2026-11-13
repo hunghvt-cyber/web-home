@@ -17,7 +17,8 @@ def write_retention(path, day, results_root, status="PASS", job_status="PASS", m
     jobs = []
     for number in range(1, 2):
         policy = "TEST_POLICY"
-        result_path = results_root / f"result-{number}.json"
+        result_path = results_root / f"run-fixture-{number}" / "result.json"
+        result_path.parent.mkdir(parents=True, exist_ok=True)
         result_bytes = json.dumps({"schema": 1, "mode": mode, "policy": policy}).encode()
         result_path.write_bytes(result_bytes)
         jobs.append({
@@ -25,6 +26,8 @@ def write_retention(path, day, results_root, status="PASS", job_status="PASS", m
             "policy": policy,
             "result": str(result_path),
             "result_sha256": hashlib.sha256(result_bytes).hexdigest(),
+            "deleted_files": 500,
+            "deleted_bytes": 3915163894,
         })
     path.write_text(json.dumps({
         "date": day,
@@ -74,6 +77,9 @@ class StatusSnapshotTests(unittest.TestCase):
             result = read_verified_retention(retention, results_root)["retention"]
             self.assertEqual(result["state"], "pass")
             self.assertEqual(result["measured_at"], "2026-10-07T22:26:41Z")
+            self.assertEqual(result["result_ref"], "run-fixture-1")
+            self.assertEqual(result["file_count"], 500)
+            self.assertEqual(result["byte_count"], 3915163894)
 
     def test_current_day_verified_retention_pass_is_used(self):
         with tempfile.TemporaryDirectory() as temp:
