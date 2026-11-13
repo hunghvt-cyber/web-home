@@ -2,7 +2,7 @@ import json
 import hashlib
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
@@ -98,11 +98,14 @@ class ReconcileRetentionAggregateTests(unittest.TestCase):
     def write_aggregate(self, document):
         self.aggregate.write_text(json.dumps(document), encoding="utf-8")
 
-    def plan(self, current_evidence=False):
+    def plan(self, current_evidence=False, expected_result_sha256=None):
         digest = file_sha256(self.aggregate)
+        if current_evidence and expected_result_sha256 is None:
+            expected_result_sha256 = file_sha256(self.result_path)
         return build_reconciled_aggregate(
             self.aggregate, self.results, self.result_id, str(self.root) if current_evidence else ROOT,
-            digest, now=NOW, current_evidence=current_evidence
+            digest, now=NOW, current_evidence=current_evidence,
+            expected_result_sha256=expected_result_sha256,
         )
 
     def prepare_current_result(self):
@@ -209,6 +212,28 @@ class ReconcileRetentionAggregateTests(unittest.TestCase):
         with self.assertRaisesRegex(ReconcileError, "result_stat_invalid"):
             self.plan(current_evidence=True)
 
+    def test_current_evidence_requires_requested_result_and_pinned_sha256(self):
+        self.prepare_current_result()
+        with self.assertRaisesRegex(ReconcileError, "result_missing"):
+            build_reconciled_aggregate(
+                self.aggregate, self.results, "run-not-requested", str(self.root),
+                file_sha256(self.aggregate), now=NOW, current_evidence=True,
+                expected_result_sha256=file_sha256(self.result_path),
+            )
+        with self.assertRaisesRegex(ReconcileError, "result_hash_mismatch"):
+            self.plan(current_evidence=True, expected_result_sha256="0" * 64)
+
+    def test_current_evidence_cli_requires_expected_result_sha256(self):
+        self.prepare_current_result()
+        args = ["--aggregate", str(self.aggregate), "--results-root", str(self.results),
+                "--result-id", self.result_id, "--expected-root", str(self.root),
+                "--expected-aggregate-sha256", file_sha256(self.aggregate), "--current-evidence"]
+        stderr = StringIO()
+        with redirect_stderr(stderr):
+            code = main(args)
+        self.assertEqual(code, 2)
+        self.assertEqual(json.loads(stderr.getvalue())["reason"], "expected_result_sha256_missing")
+
     def test_historical_mode_remains_default_and_requires_historical_signatures(self):
         result = result_document()
         result["evidence_signatures"] = None
@@ -243,7 +268,8 @@ class ReconcileRetentionAggregateTests(unittest.TestCase):
         with redirect_stdout(out):
             code = main(["--aggregate", str(self.aggregate), "--results-root", str(self.results),
                          "--result-id", self.result_id, "--expected-root", str(self.root),
-                         "--expected-aggregate-sha256", file_sha256(self.aggregate), "--current-evidence"])
+                         "--expected-aggregate-sha256", file_sha256(self.aggregate),
+                         "--expected-result-sha256", file_sha256(self.result_path), "--current-evidence"])
         summary = json.loads(out.getvalue())
         self.assertEqual(code, 0)
         self.assertEqual(summary["outcome"], "READY_TO_ADOPT")
@@ -367,6 +393,40 @@ class ReconcileRetentionAggregateTests(unittest.TestCase):
         with self.assertRaisesRegex(ReconcileError, "result_candidate_ambiguous_or_mismatched"):
             self.plan()
 
+    def test_current_evidence_excludes_competing_result_with_different_total(self):
+        self.prepare_current_result()
+        other = result_document()
+        other["root"] = str(self.root)
+        other["evidence_signatures"] = None
+        other_sizes = [6_148_248 if index < 61 else 6_148_247 for index in range(500)]
+        for index, (row, size) in enumerate(zip(other["rows"], other_sizes)):
+            row["remote"]["id"] = f"other-run-id-{index}"
+            row["stat"][2] = size
+            row["remote"]["size"] = size
+        self.assertEqual(sum(other_sizes), 3_074_123_561)
+        candidate = self.results / "run-different-total" / "result.json"
+        candidate.parent.mkdir()
+        candidate.write_text(json.dumps(other), encoding="utf-8")
+
+        reconciled, summary = self.plan(current_evidence=True)
+
+        self.assertEqual(summary["outcome"], "READY_TO_ADOPT")
+        self.assertEqual(summary["result_id"], self.result_id)
+        self.assertEqual(summary["byte_count"], 3_915_163_894)
+        self.assertEqual(reconciled["status"], "VERIFIED_WITH_CURRENT_EVIDENCE")
+
+    def test_current_evidence_rejects_fully_qualifying_duplicate_candidate(self):
+        self.prepare_current_result()
+        other = result_document()
+        other["root"] = str(self.root)
+        other["evidence_signatures"] = None
+        candidate = self.results / "run-duplicate" / "result.json"
+        candidate.parent.mkdir()
+        candidate.write_text(json.dumps(other), encoding="utf-8")
+
+        with self.assertRaisesRegex(ReconcileError, "result_candidate_ambiguous_or_mismatched"):
+            self.plan(current_evidence=True)
+
     def test_apply_updates_only_pointer_and_keeps_backup(self):
         reconciled, summary = self.plan()
         expected = file_sha256(self.aggregate)
@@ -443,7 +503,9 @@ class ReconcileRetentionAggregateTests(unittest.TestCase):
         with redirect_stdout(out):
             code = main(["--aggregate", str(self.aggregate), "--results-root", str(self.results),
                          "--result-id", self.result_id, "--expected-root", str(self.root),
-                         "--expected-aggregate-sha256", expected, "--current-evidence", "--apply"])
+                         "--expected-aggregate-sha256", expected,
+                         "--expected-result-sha256", file_sha256(self.result_path),
+                         "--current-evidence", "--apply"])
         self.assertEqual(code, 0)
         adopted = json.loads(self.aggregate.read_text())
         self.assertEqual(adopted["status"], "VERIFIED_WITH_CURRENT_EVIDENCE")
