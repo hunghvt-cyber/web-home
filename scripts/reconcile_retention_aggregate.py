@@ -89,8 +89,13 @@ def timestamp_text(value):
 
 def resolve_result_path(results_root, result_id):
     require(bool(RUN_ID_RE.fullmatch(result_id)), "result_id_invalid")
-    root = results_root.resolve(strict=True)
-    path = (root / result_id / "result.json").resolve(strict=True)
+    try:
+        root = results_root.resolve(strict=True)
+        path = (root / result_id / "result.json").resolve(strict=True)
+    except FileNotFoundError:
+        raise ReconcileError("result_missing") from None
+    except OSError:
+        raise ReconcileError("result_path_unavailable") from None
     require(path.is_relative_to(root) and path.parent.parent == root, "result_path_outside_root")
     require(path.is_file(), "result_missing")
     return root, path
@@ -99,7 +104,7 @@ def resolve_result_path(results_root, result_id):
 def _validate_archived_rows(report):
     rows = report.get("rows")
     require(isinstance(rows, list) and len(rows) > 0, "result_rows_missing")
-    require(len(rows) <= MAX_FILES, "result_file_limit_exceeded")
+    require(len(rows) == MAX_FILES, "result_file_count_mismatch")
     total_bytes = 0
     for row in rows:
         require(isinstance(row, dict), "result_row_invalid")
@@ -125,8 +130,31 @@ def _validate_archived_rows(report):
         total_bytes += size
     require(total_bytes <= MAX_BYTES, "result_byte_limit_exceeded")
     require(report.get("stopped_for_time_budget") is False, "result_partial_time_budget")
-    require(isinstance(report.get("evidence_signatures"), dict), "result_evidence_missing")
     return len(rows), total_bytes
+
+
+def _validate_evidence_signatures(report, expected_root):
+    """Validate the producer's filesystem-stat snapshot shape, not a crypto signature."""
+    signatures = report.get("evidence_signatures")
+    require(isinstance(signatures, dict) and bool(signatures), "result_evidence_invalid")
+    relative_sources = (
+        "events/cam1-events.jsonl",
+        "events/cam2-events.jsonl",
+        "events/recovery/cam1-event-logger-recovery.log",
+        "events/recovery/cam2-event-logger-recovery.log",
+    )
+    expected_paths = {str(Path(expected_root) / item) for item in relative_sources}
+    require(set(signatures) == expected_paths, "result_evidence_invalid")
+    optional_paths = {str(Path(expected_root) / item) for item in relative_sources[2:]}
+    for path, value in signatures.items():
+        if value is None and path in optional_paths:
+            continue
+        require(
+            isinstance(value, list)
+            and len(value) == 5
+            and all(type(part) is int and part >= 0 for part in value),
+            "result_evidence_invalid",
+        )
 
 
 def _candidate_identity(report, expected_root, policy, start, end):
@@ -242,6 +270,7 @@ def build_reconciled_aggregate(
         "result_identity_or_policy_mismatch",
     )
     file_count, byte_count = _validate_archived_rows(result)
+    _validate_evidence_signatures(result, expected_root)
     candidates = _matching_candidate_ids(results_root, expected_root, target["policy"], started, window_end)
     require(candidates == [result_id], "result_candidate_ambiguous_or_mismatched")
 
