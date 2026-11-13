@@ -30,6 +30,16 @@ MAX_CACHE_AGE = 120
 MAX_RECORDING_AGE = 15 * 60
 MAX_HEALTH_AGE = 15 * 60
 FUTURE_SKEW = 5 * 60
+CURRENT_VERIFICATION_STATUS = "VERIFIED_WITH_CURRENT_EVIDENCE"
+CURRENT_EVIDENCE_METHOD = "current_filesystem_stat_revalidation"
+CURRENT_EVIDENCE_VERSION = 1
+EXPECTED_RETENTION_BYTES = 3_915_163_894
+EVIDENCE_RELATIVE_SOURCES = (
+    "events/cam1-events.jsonl",
+    "events/cam2-events.jsonl",
+    "events/recovery/cam1-event-logger-recovery.log",
+    "events/recovery/cam2-event-logger-recovery.log",
+)
 
 
 def iso(epoch):
@@ -52,6 +62,53 @@ def epoch(value):
 
 def valid_state(value):
     return value if value in STATES else "unknown"
+
+
+def valid_current_verification(value, expected_root):
+    if not isinstance(value, dict) or not isinstance(expected_root, str) or not Path(expected_root).is_absolute():
+        return False
+    if set(value) != {"status", "method", "version", "evidence_collected_at",
+                      "historical_evidence_signatures_available", "current_evidence_signatures"}:
+        return False
+    if (value.get("status") != CURRENT_VERIFICATION_STATUS
+            or value.get("method") != CURRENT_EVIDENCE_METHOD
+            or value.get("version") != CURRENT_EVIDENCE_VERSION
+            or value.get("historical_evidence_signatures_available") is not False):
+        return False
+    collected = value.get("evidence_collected_at")
+    if not isinstance(collected, str) or not re.fullmatch(
+            r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z", collected):
+        return False
+    collected_epoch = epoch(collected)
+    if collected_epoch is None or collected_epoch > time.time() + FUTURE_SKEW:
+        return False
+    signatures = value.get("current_evidence_signatures")
+    if not isinstance(signatures, dict):
+        return False
+    expected = set(EVIDENCE_RELATIVE_SOURCES)
+    if set(signatures) != expected:
+        return False
+    return all(isinstance(row, list) and len(row) == 5
+               and all(type(item) is int and item >= 0 for item in row)
+               for row in signatures.values())
+
+
+def valid_historical_evidence(result):
+    root = result.get("root") if isinstance(result, dict) else None
+    signatures = result.get("evidence_signatures") if isinstance(result, dict) else None
+    if not isinstance(root, str) or not isinstance(signatures, dict) or not signatures:
+        return False
+    expected = {str(Path(root) / item) for item in EVIDENCE_RELATIVE_SOURCES}
+    optional = {str(Path(root) / item) for item in EVIDENCE_RELATIVE_SOURCES[2:]}
+    if set(signatures) != expected:
+        return False
+    for path, value in signatures.items():
+        if value is None and path in optional:
+            continue
+        if (not isinstance(value, list) or len(value) != 5
+                or not all(type(part) is int and part >= 0 for part in value)):
+            return False
+    return True
 
 
 def read_maintenance(path=MAINTENANCE):
@@ -90,8 +147,13 @@ def read_verified_retention(path=VERIFIED_RETENTION, results_root=VERIFIED_RETEN
             raise ValueError("retention date mismatch")
         if not isinstance(jobs, list) or not jobs:
             raise ValueError("missing retention jobs")
+        is_current = data.get("status") == CURRENT_VERIFICATION_STATUS
+        verification = data.get("verification") if is_current else None
+        if is_current and not isinstance(verification, dict):
+            raise ValueError("invalid current evidence verification")
         job_states = []
         published_result = None
+        verified_results = []
         results_root = results_root.resolve()
         for job in jobs:
             if not isinstance(job, dict):
@@ -109,9 +171,29 @@ def read_verified_retention(path=VERIFIED_RETENTION, results_root=VERIFIED_RETEN
             if (not isinstance(result_data, dict) or result_data.get("schema") != 1
                     or result_data.get("mode") != "APPLY" or result_data.get("policy") != job.get("policy")):
                 raise ValueError("retention evidence is not an applied result")
-            published_result = (result_path, job)
+            published_result = (result_path, job, result_data)
+            verified_results.append(published_result)
             job_states.append({"PASS": "pass", "WARN": "warn", "FAIL": "fail"}.get(job.get("status"), "unknown"))
         overall = {"PASS": "pass", "WARN": "warn", "FAIL": "fail"}.get(data.get("status"), "unknown")
+        if is_current:
+            overall = "pass" if all(job.get("status") == "PASS" for job in jobs) else "unknown"
+            current_jobs = [job for job in jobs if isinstance(job, dict)
+                            and job.get("verification_status") == CURRENT_VERIFICATION_STATUS]
+            if len(current_jobs) != 1:
+                raise ValueError("current verification job is ambiguous")
+            current_job = current_jobs[0]
+            if current_job.get("status") != "PASS" or current_job.get("deleted_files") != 500 or current_job.get("deleted_bytes") != EXPECTED_RETENTION_BYTES:
+                raise ValueError("current verification counts are invalid")
+            published_result = next((entry for entry in verified_results if entry[1] is current_job), None)
+            if published_result is None:
+                raise ValueError("current verification result is missing")
+            reconciliation = data.get("reconciliation")
+            relative_source = published_result[0].relative_to(results_root).as_posix()
+            if (not isinstance(reconciliation, dict)
+                    or reconciliation.get("kind") != "standalone_verified_apply_current_evidence"
+                    or reconciliation.get("source_result") != relative_source
+                    or reconciliation.get("source_sha256") != hashlib.sha256(published_result[0].read_bytes()).hexdigest()):
+                raise ValueError("current reconciliation reference is invalid")
         if overall == "pass" and all(state == "pass" for state in job_states):
             state = "pass"
         elif overall == "fail" or "fail" in job_states:
@@ -122,7 +204,9 @@ def read_verified_retention(path=VERIFIED_RETENTION, results_root=VERIFIED_RETEN
             state = "unknown"
         retention = {"state": valid_state(state), "measured_at": iso(finished) if state != "unknown" else None}
         if state != "unknown" and published_result is not None:
-            result_path, job = published_result
+            result_path, job, result_data = published_result
+            if is_current and not valid_current_verification(verification, result_data.get("root")):
+                raise ValueError("invalid current evidence verification")
             relative = result_path.relative_to(results_root)
             if len(relative.parts) == 2 and re.fullmatch(r"run-[A-Za-z0-9_-]{1,80}", relative.parts[0]):
                 retention["result_ref"] = relative.parts[0]
@@ -131,6 +215,14 @@ def read_verified_retention(path=VERIFIED_RETENTION, results_root=VERIFIED_RETEN
                     and isinstance(byte_count, int) and not isinstance(byte_count, bool) and byte_count >= 0):
                 retention["file_count"] = file_count
                 retention["byte_count"] = byte_count
+            if is_current:
+                if (job.get("verification_status") != CURRENT_VERIFICATION_STATUS
+                        or file_count != 500 or byte_count != EXPECTED_RETENTION_BYTES):
+                    return {"retention": {"state": "unknown", "measured_at": None}}
+                retention["verification_status"] = CURRENT_VERIFICATION_STATUS
+                retention["evidence_collected_at"] = verification["evidence_collected_at"]
+            elif state == "pass" and valid_historical_evidence(result_data):
+                retention["verification_status"] = "HISTORICALLY_VERIFIED"
         return {"retention": retention}
     except (OSError, ValueError, TypeError, OverflowError, AttributeError):
         return {"retention": {"state": "unknown", "measured_at": None}}
@@ -251,7 +343,10 @@ def validate(data):
         assert set(data[name]) == {"state"} and data[name]["state"] in STATES
     for name in ("maintenance", "retention"):
         assert {"state", "measured_at"} <= set(data[name])
-        assert set(data[name]) <= {"state", "measured_at", "result_ref", "file_count", "byte_count"}
+        allowed = {"state", "measured_at", "result_ref", "file_count", "byte_count"}
+        if name == "retention":
+            allowed |= {"verification_status", "evidence_collected_at"}
+        assert set(data[name]) <= allowed
         assert data[name]["state"] in STATES
         assert data[name]["measured_at"] is None or isinstance(data[name]["measured_at"], str)
         if name == "retention":
@@ -260,6 +355,16 @@ def validate(data):
                 value = data[name].get(field)
                 assert value is None or (isinstance(value, int) and not isinstance(value, bool) and value >= 0)
             assert (data[name].get("file_count") is None) == (data[name].get("byte_count") is None)
+            if "verification_status" in data[name]:
+                assert data[name]["verification_status"] in {"HISTORICALLY_VERIFIED", CURRENT_VERIFICATION_STATUS}
+                if data[name]["verification_status"] == CURRENT_VERIFICATION_STATUS:
+                    stamp = data[name].get("evidence_collected_at")
+                    assert isinstance(stamp, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z", stamp)
+                    assert epoch(stamp) is not None
+                else:
+                    assert "evidence_collected_at" not in data[name]
+            else:
+                assert "evidence_collected_at" not in data[name]
     assert data["updated_at"] is None or isinstance(data["updated_at"], str)
     assert set(data["health"]) == {"root", "vol1", "ram", "swap"}
     for name in ("root", "vol1"):

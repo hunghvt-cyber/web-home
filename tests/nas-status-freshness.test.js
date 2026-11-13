@@ -16,6 +16,13 @@ test('stale telemetry cannot present camera/NAS as currently healthy',async()=>{
 test('network error clears current telemetry and health confirmation',async()=>{
  const get=await run(Error('offline'));assert.equal(get('cam1'),'Chưa xác minh');assert.equal(get('nas'),'Chưa xác minh');assert.equal(get('health-ram'),'Chưa có dữ liệu mới');
 });
+test('retention labels distinguish current evidence from historical verification',async()=>{
+ const current=await run({schema:1,updated_at:new Date().toISOString(),retention:{state:'pass',measured_at:'2026-10-08T22:26:41Z',verification_status:'VERIFIED_WITH_CURRENT_EVIDENCE',evidence_collected_at:'2026-10-08T22:26:41.123456Z'}});
+ assert.equal(current('retention'),'Đã xác minh bằng bằng chứng hiện tại');
+ assert.match(current('retention-time'),/Bằng chứng hiện tại thu thập lúc/);
+ const historical=await run({schema:1,updated_at:new Date().toISOString(),retention:{state:'pass',measured_at:'2026-10-08T22:26:41Z',verification_status:'HISTORICALLY_VERIFIED'}});
+ assert.equal(historical('retention'),'Đã xác minh bằng bằng chứng lịch sử');
+});
 test('30-minute heartbeat remains usable but old measurements and silent publishers do not',async()=>{
  const snapshot={schema:1,updated_at:new Date(Date.now()-30*60000).toISOString(),cam1:{state:'ok'},_report:{received_at:new Date(Date.now()-29*60000).toISOString()}};
  let get=await run(snapshot);assert.equal(get('cam1'),'Hoạt động');assert.match(get('updated'),/Nhận lúc/);

@@ -19,7 +19,15 @@ def write_retention(path, day, results_root, status="PASS", job_status="PASS", m
         policy = "TEST_POLICY"
         result_path = results_root / f"run-fixture-{number}" / "result.json"
         result_path.parent.mkdir(parents=True, exist_ok=True)
-        result_bytes = json.dumps({"schema": 1, "mode": mode, "policy": policy}).encode()
+        result_bytes = json.dumps({
+            "schema": 1, "mode": mode, "policy": policy, "root": "/archive",
+            "evidence_signatures": {
+                "/archive/events/cam1-events.jsonl": [1, 2, 3, 4, 5],
+                "/archive/events/cam2-events.jsonl": [1, 2, 3, 4, 5],
+                "/archive/events/recovery/cam1-event-logger-recovery.log": None,
+                "/archive/events/recovery/cam2-event-logger-recovery.log": [1, 2, 3, 4, 5],
+            },
+        }).encode()
         result_path.write_bytes(result_bytes)
         jobs.append({
             "status": job_status,
@@ -80,6 +88,7 @@ class StatusSnapshotTests(unittest.TestCase):
             self.assertEqual(result["result_ref"], "run-fixture-1")
             self.assertEqual(result["file_count"], 500)
             self.assertEqual(result["byte_count"], 3915163894)
+            self.assertEqual(result["verification_status"], "HISTORICALLY_VERIFIED")
 
     def test_current_day_verified_retention_pass_is_used(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -89,6 +98,69 @@ class StatusSnapshotTests(unittest.TestCase):
             result = read_verified_retention(retention, results_root)["retention"]
             self.assertEqual(result["state"], "pass")
             self.assertEqual(result["measured_at"], "2026-10-08T22:26:41Z")
+
+    def test_current_evidence_is_published_distinctly_without_local_paths(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            retention = root / "latest.json"
+            results_root = root / "verified"
+            write_retention(retention, "2026-10-09", results_root)
+            aggregate = json.loads(retention.read_text())
+            aggregate["status"] = "VERIFIED_WITH_CURRENT_EVIDENCE"
+            result_path = results_root / "run-fixture-1" / "result.json"
+            result = json.loads(result_path.read_text())
+            result["root"] = str(root)
+            result["evidence_signatures"] = None
+            result_path.write_text(json.dumps(result))
+            payload = result_path.read_bytes()
+            aggregate["jobs"][0].update({
+                "result_sha256": hashlib.sha256(payload).hexdigest(),
+                "verification_status": "VERIFIED_WITH_CURRENT_EVIDENCE",
+            })
+            expected = [path for path in (
+                "events/cam1-events.jsonl", "events/cam2-events.jsonl",
+                "events/recovery/cam1-event-logger-recovery.log",
+                "events/recovery/cam2-event-logger-recovery.log",
+            )]
+            aggregate["verification"] = {
+                "status": "VERIFIED_WITH_CURRENT_EVIDENCE",
+                "method": "current_filesystem_stat_revalidation", "version": 1,
+                "evidence_collected_at": "2026-10-08T22:26:41.123456Z",
+                "historical_evidence_signatures_available": False,
+                "current_evidence_signatures": {path: [1, 2, 3, 4, 5] for path in expected},
+            }
+            aggregate["reconciliation"] = {
+                "kind": "standalone_verified_apply_current_evidence",
+                "source_result": "run-fixture-1/result.json",
+                "source_sha256": hashlib.sha256(payload).hexdigest(),
+            }
+            retention.write_text(json.dumps(aggregate))
+            observed = read_verified_retention(retention, results_root)["retention"]
+            self.assertEqual(observed["state"], "pass")
+            self.assertEqual(observed["verification_status"], "VERIFIED_WITH_CURRENT_EVIDENCE")
+            self.assertEqual(observed["evidence_collected_at"], "2026-10-08T22:26:41.123456Z")
+            self.assertFalse(any(path in json.dumps(observed) for path in expected))
+            del aggregate["verification"]["evidence_collected_at"]
+            retention.write_text(json.dumps(aggregate))
+            self.assertEqual(read_verified_retention(retention, results_root)["retention"]["state"], "unknown")
+
+    def test_pass_without_historical_signatures_is_not_labeled_historically_verified(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            retention = root / "latest.json"
+            results_root = root / "verified"
+            write_retention(retention, "2026-10-09", results_root)
+            result_path = results_root / "run-fixture-1" / "result.json"
+            result = json.loads(result_path.read_text())
+            result.pop("evidence_signatures")
+            payload = json.dumps(result).encode()
+            result_path.write_bytes(payload)
+            aggregate = json.loads(retention.read_text())
+            aggregate["jobs"][0]["result_sha256"] = hashlib.sha256(payload).hexdigest()
+            retention.write_text(json.dumps(aggregate))
+            observed = read_verified_retention(retention, results_root)["retention"]
+            self.assertEqual(observed["state"], "pass")
+            self.assertNotIn("verification_status", observed)
 
     def test_dry_run_is_not_verified_retention(self):
         with tempfile.TemporaryDirectory() as temp:
