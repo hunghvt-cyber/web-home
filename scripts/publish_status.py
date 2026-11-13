@@ -91,6 +91,7 @@ def read_verified_retention(path=VERIFIED_RETENTION, results_root=VERIFIED_RETEN
         if not isinstance(jobs, list) or not jobs:
             raise ValueError("missing retention jobs")
         job_states = []
+        published_result = None
         results_root = results_root.resolve()
         for job in jobs:
             if not isinstance(job, dict):
@@ -108,6 +109,7 @@ def read_verified_retention(path=VERIFIED_RETENTION, results_root=VERIFIED_RETEN
             if (not isinstance(result_data, dict) or result_data.get("schema") != 1
                     or result_data.get("mode") != "APPLY" or result_data.get("policy") != job.get("policy")):
                 raise ValueError("retention evidence is not an applied result")
+            published_result = (result_path, job)
             job_states.append({"PASS": "pass", "WARN": "warn", "FAIL": "fail"}.get(job.get("status"), "unknown"))
         overall = {"PASS": "pass", "WARN": "warn", "FAIL": "fail"}.get(data.get("status"), "unknown")
         if overall == "pass" and all(state == "pass" for state in job_states):
@@ -118,8 +120,18 @@ def read_verified_retention(path=VERIFIED_RETENTION, results_root=VERIFIED_RETEN
             state = "warn"
         else:
             state = "unknown"
-        measured_at = iso(finished) if state != "unknown" else None
-        return {"retention": {"state": valid_state(state), "measured_at": measured_at}}
+        retention = {"state": valid_state(state), "measured_at": iso(finished) if state != "unknown" else None}
+        if state != "unknown" and published_result is not None:
+            result_path, job = published_result
+            relative = result_path.relative_to(results_root)
+            if len(relative.parts) == 2 and re.fullmatch(r"run-[A-Za-z0-9_-]{1,80}", relative.parts[0]):
+                retention["result_ref"] = relative.parts[0]
+            file_count, byte_count = job.get("deleted_files"), job.get("deleted_bytes")
+            if (isinstance(file_count, int) and not isinstance(file_count, bool) and file_count >= 0
+                    and isinstance(byte_count, int) and not isinstance(byte_count, bool) and byte_count >= 0):
+                retention["file_count"] = file_count
+                retention["byte_count"] = byte_count
+        return {"retention": retention}
     except (OSError, ValueError, TypeError, OverflowError, AttributeError):
         return {"retention": {"state": "unknown", "measured_at": None}}
 
@@ -238,9 +250,16 @@ def validate(data):
     for name in ("cam1", "cam2", "nas"):
         assert set(data[name]) == {"state"} and data[name]["state"] in STATES
     for name in ("maintenance", "retention"):
-        assert set(data[name]) == {"state", "measured_at"}
+        assert {"state", "measured_at"} <= set(data[name])
+        assert set(data[name]) <= {"state", "measured_at", "result_ref", "file_count", "byte_count"}
         assert data[name]["state"] in STATES
         assert data[name]["measured_at"] is None or isinstance(data[name]["measured_at"], str)
+        if name == "retention":
+            assert data[name].get("result_ref") is None or re.fullmatch(r"run-[A-Za-z0-9_-]{1,80}", data[name]["result_ref"])
+            for field in ("file_count", "byte_count"):
+                value = data[name].get(field)
+                assert value is None or (isinstance(value, int) and not isinstance(value, bool) and value >= 0)
+            assert (data[name].get("file_count") is None) == (data[name].get("byte_count") is None)
     assert data["updated_at"] is None or isinstance(data["updated_at"], str)
     assert set(data["health"]) == {"root", "vol1", "ram", "swap"}
     for name in ("root", "vol1"):

@@ -37,6 +37,12 @@ Implemented a Python publisher that reads the existing 15-second FnNAS monitorin
 - QR assets and Home-AI shortcut markup were not changed by the status feed implementation.
 - Snapshot fixtures cover previous-day and current-day result timestamps, verified retention dry-run, old telemetry snapshots, fresh recording evidence, and missing sources.
 
+## Issue #53 — verified aggregate recovery
+
+`scripts/reconcile_retention_aggregate.py` is an explicit recovery helper for a single verified standalone APPLY result and a blocked aggregate. It never runs a retention operation. Its default invocation prints a read-only plan; `--apply` is a separate operator action that updates only `latest.json`, after rechecking the reviewed aggregate SHA under a lock, and preserves the prior pointer as `latest.json.before-<run-id>`. Dated historical aggregates and standalone results are not edited. The helper fails closed unless exactly one pending `ARCHIVED_EVENTS` job and exactly one matching result exist, the result is within 24 hours of aggregate start, rows are complete and within existing 500-file/24-GiB bounds, and local/remote size and SHA evidence match.
+
+The normal publisher remains aggregate-only and does not discover standalone results. On a successful referenced result it may include the safe run ID, file count, and byte count in the status payload; it never includes row contents or local paths. Schema 1 consumers accept the optional retention fields. The UI displays aggregate measurement time and verified totals. This repository change does not reconcile live state, invoke a publisher, upload a report, or establish that this checkout is installed on the NAS.
+
 ## Schedule
 
 The user-level `homepage-status-publish.timer` runs one minute after boot and then every five minutes. It is separate from the collector and maintenance timers. It does not push GitHub or trigger a deployment on each run.

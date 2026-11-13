@@ -26,7 +26,9 @@ async function refresh(){
         el.textContent=key==='retention'?({pass:'Đã dọn xong',ok:'Đã dọn xong',warn:'Cần kiểm tra',fail:'Dọn chưa thành công',unknown:'Chưa có kết quả xác nhận'}[item.state]||'Chưa có kết quả xác nhận'):(labels[item.state]||'Chưa có kết quả xác nhận');
         const detail=document.getElementById(key+'-time');
         const measured=time(item.measured_at);
-        detail.textContent=measured?'Kết quả gần nhất · '+measured:'Chưa có thời điểm kết quả';
+        const evidence=key==='retention'&&Number.isSafeInteger(item.file_count)&&item.file_count>=0&&Number.isSafeInteger(item.byte_count)&&item.byte_count>=0
+          ?' · '+item.file_count.toLocaleString('vi-VN')+' tệp · '+(item.byte_count/1024**3).toFixed(1)+' GiB':'';
+        detail.textContent=measured?'Kết quả gần nhất · '+measured+evidence:'Chưa có thời điểm kết quả';
       }else {
         const label=stale?'Dữ liệu cũ · Chưa xác minh hiện tại':!snapshotTime?'Chưa xác minh':key==='nas'?({ok:'Đủ chỗ',pass:'Đủ chỗ',warn:'Sắp đầy',fail:'Cần kiểm tra dung lượng',unknown:'Chưa xác minh'}[item.state]||labels.unknown):(labels[item.state]||labels.unknown);
         const free=key==='nas'&&snapshotTime&&!stale?bytesGiB(data.health?.vol1?.available_bytes):null;

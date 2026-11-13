@@ -44,6 +44,20 @@ test('GAS refuses private extra fields, invalid metrics and busy writes before t
  const s=snapshot();s.health.swap.used_bytes=11;assert.equal(h.post(h.request(1,{snapshotText:JSON.stringify(s)})).code,'INVALID_SNAPSHOT');
  h.setBusy(true);assert.equal(h.post(h.request()).code,'BUSY');assert.equal(h.files.size,0);
 });
+test('retention schema accepts bounded evidence fields and rejects unsafe references',()=>{
+ const value=snapshot();value.retention={state:'pass',measured_at:new Date().toISOString(),result_ref:'run-safe_1-2',file_count:500,byte_count:3915163894};
+ assert.equal(schema.validate(value),value);
+ const invalidValues=[
+  {...snapshot(),retention:{state:'pass',measured_at:null,result_ref:'../private'}},
+  {...snapshot(),retention:{state:'pass',measured_at:null,file_count:-1,byte_count:1}},
+  {...snapshot(),retention:{state:'pass',measured_at:null,byte_count:1}},
+  {...snapshot(),retention:{state:'pass',measured_at:null,file_count:1.5,byte_count:2}},
+  {...snapshot(),retention:{state:'pass',measured_at:null,extra:'private'}},
+ ];
+ for(const invalid of invalidValues){
+  assert.throws(()=>schema.validate(invalid));
+ }
+});
 test('lost commit response reconciles; failed later write preserves the last head',()=>{
  const h=harness();h.ambiguousCommit();const req=h.request();assert.equal(h.post(req).ok,true);assert.equal(h.post(req).replay,true);
  const head=h.props.get('NAS_REPORT_HEAD');h.failCreate();assert.equal(h.post(h.request(2)).ok,false);assert.equal(h.props.get('NAS_REPORT_HEAD'),head);
