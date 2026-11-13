@@ -47,12 +47,20 @@ test('GAS refuses private extra fields, invalid metrics and busy writes before t
 test('retention schema accepts bounded evidence fields and rejects unsafe references',()=>{
  const value=snapshot();value.retention={state:'pass',measured_at:new Date().toISOString(),result_ref:'run-safe_1-2',file_count:500,byte_count:3915163894};
  assert.equal(schema.validate(value),value);
+ const current=snapshot();current.retention={state:'pass',measured_at:new Date().toISOString(),result_ref:'run-safe_1-2',file_count:500,byte_count:3915163894,verification_status:'VERIFIED_WITH_CURRENT_EVIDENCE',evidence_collected_at:'2026-10-08T22:26:41.123456Z'};
+ assert.equal(schema.validate(current),current);
+ const historical=snapshot();historical.retention={state:'pass',measured_at:new Date().toISOString(),verification_status:'HISTORICALLY_VERIFIED'};
+ assert.equal(schema.validate(historical),historical);
  const invalidValues=[
   {...snapshot(),retention:{state:'pass',measured_at:null,result_ref:'../private'}},
   {...snapshot(),retention:{state:'pass',measured_at:null,file_count:-1,byte_count:1}},
   {...snapshot(),retention:{state:'pass',measured_at:null,byte_count:1}},
   {...snapshot(),retention:{state:'pass',measured_at:null,file_count:1.5,byte_count:2}},
   {...snapshot(),retention:{state:'pass',measured_at:null,extra:'private'}},
+  {...snapshot(),retention:{state:'pass',measured_at:null,verification_status:'VERIFIED_WITH_CURRENT_EVIDENCE'}},
+  {...snapshot(),retention:{state:'pass',measured_at:null,file_count:499,byte_count:3915163894,verification_status:'VERIFIED_WITH_CURRENT_EVIDENCE',evidence_collected_at:'2026-10-08T22:26:41.123456Z'}},
+  {...snapshot(),retention:{state:'pass',measured_at:null,file_count:500,byte_count:1,verification_status:'VERIFIED_WITH_CURRENT_EVIDENCE',evidence_collected_at:'2026-10-08T22:26:41.123456Z'}},
+  {...snapshot(),retention:{state:'pass',measured_at:null,verification_status:'HISTORICALLY_VERIFIED',evidence_collected_at:'2026-10-08T22:26:41Z'}},
  ];
  for(const invalid of invalidValues){
   assert.throws(()=>schema.validate(invalid));

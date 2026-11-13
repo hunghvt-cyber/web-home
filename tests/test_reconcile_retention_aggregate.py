@@ -2,6 +2,8 @@ import json
 import hashlib
 import tempfile
 import unittest
+from contextlib import redirect_stdout
+from io import StringIO
 from pathlib import Path
 
 from scripts.reconcile_retention_aggregate import (
@@ -9,6 +11,7 @@ from scripts.reconcile_retention_aggregate import (
     apply_reconciliation,
     build_reconciled_aggregate,
     file_sha256,
+    main,
 )
 
 
@@ -94,11 +97,31 @@ class ReconcileRetentionAggregateTests(unittest.TestCase):
     def write_aggregate(self, document):
         self.aggregate.write_text(json.dumps(document), encoding="utf-8")
 
-    def plan(self):
+    def plan(self, current_evidence=False):
         digest = file_sha256(self.aggregate)
         return build_reconciled_aggregate(
-            self.aggregate, self.results, self.result_id, ROOT, digest, now=NOW
+            self.aggregate, self.results, self.result_id, str(self.root) if current_evidence else ROOT,
+            digest, now=NOW, current_evidence=current_evidence
         )
+
+    def prepare_current_result(self):
+        result = result_document()
+        result["root"] = str(self.root)
+        result["evidence_signatures"] = None
+        self.result_path.write_text(json.dumps(result), encoding="utf-8")
+        prior = json.loads(self.prior_path.read_text(encoding="utf-8"))
+        prior["root"] = str(self.root)
+        self.prior_path.write_text(json.dumps(prior), encoding="utf-8")
+        self.prior_hash = file_sha256(self.prior_path)
+        self.write_aggregate(aggregate_document(self.prior_path, self.prior_hash))
+        for relative in (
+            "events/cam1-events.jsonl", "events/cam2-events.jsonl",
+            "events/recovery/cam1-event-logger-recovery.log",
+            "events/recovery/cam2-event-logger-recovery.log",
+        ):
+            path = self.root / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("synthetic current evidence\n", encoding="utf-8")
 
     def test_valid_result_plans_without_writing_and_preserves_history(self):
         before = self.aggregate.read_bytes()
@@ -116,6 +139,94 @@ class ReconcileRetentionAggregateTests(unittest.TestCase):
         self.assertEqual(self.aggregate.read_bytes(), before)
         self.assertEqual(self.result_path.read_bytes(), result_before)
         self.assertEqual(historical.read_bytes(), historical_before)
+
+    def test_valid_500_rows_use_current_evidence_without_changing_result(self):
+        self.prepare_current_result()
+        before = self.result_path.read_bytes()
+        reconciled, summary = self.plan(current_evidence=True)
+        self.assertEqual(summary["outcome"], "READY_TO_ADOPT")
+        self.assertEqual(summary["file_count"], 500)
+        self.assertEqual(summary["byte_count"], 3_915_163_894)
+        self.assertEqual(reconciled["status"], "VERIFIED_WITH_CURRENT_EVIDENCE")
+        self.assertEqual(reconciled["verification"]["status"], "VERIFIED_WITH_CURRENT_EVIDENCE")
+        self.assertFalse(reconciled["verification"]["historical_evidence_signatures_available"])
+        self.assertEqual(reconciled["verification"]["method"], "current_filesystem_stat_revalidation")
+        self.assertEqual(len(reconciled["verification"]["current_evidence_signatures"]), 4)
+        self.assertEqual(summary["verification"], reconciled["verification"])
+        self.assertEqual(summary["aggregate_status"], "VERIFIED_WITH_CURRENT_EVIDENCE")
+        self.assertEqual(set(summary["verification"]["current_evidence_signatures"]), {
+            "events/cam1-events.jsonl", "events/cam2-events.jsonl",
+            "events/recovery/cam1-event-logger-recovery.log",
+            "events/recovery/cam2-event-logger-recovery.log",
+        })
+        self.assertEqual(self.result_path.read_bytes(), before)
+        self.assertIsNone(json.loads(before)["evidence_signatures"])
+
+    def test_current_evidence_rejects_wrong_total_and_duplicate_remote_ids(self):
+        self.prepare_current_result()
+        result = json.loads(self.result_path.read_text())
+        result["rows"][0]["stat"][2] += 1
+        result["rows"][0]["remote"]["size"] += 1
+        self.result_path.write_text(json.dumps(result))
+        with self.assertRaisesRegex(ReconcileError, "result_byte_total_mismatch"):
+            self.plan(current_evidence=True)
+        result = result_document()
+        result["root"] = str(self.root)
+        result["evidence_signatures"] = None
+        result["rows"][1]["remote"]["id"] = result["rows"][0]["remote"]["id"]
+        self.result_path.write_text(json.dumps(result))
+        with self.assertRaisesRegex(ReconcileError, "result_remote_id_duplicate"):
+            self.plan(current_evidence=True)
+
+    def test_current_evidence_rejects_row_count_and_remote_proof_errors(self):
+        self.prepare_current_result()
+        result = result_document(499)
+        result["root"] = str(self.root)
+        result["evidence_signatures"] = None
+        self.result_path.write_text(json.dumps(result))
+        with self.assertRaisesRegex(ReconcileError, "result_file_count_mismatch"):
+            self.plan(current_evidence=True)
+        for field, bad_value in (("sha256", "x" * 64), ("size", -1)):
+            result = result_document()
+            result["root"] = str(self.root)
+            result["evidence_signatures"] = None
+            result["rows"][0]["remote"][field] = bad_value
+            self.result_path.write_text(json.dumps(result))
+            with self.subTest(field=field), self.assertRaisesRegex(ReconcileError, "result_remote_proof_invalid"):
+                self.plan(current_evidence=True)
+
+    def test_current_evidence_rejects_missing_source_or_invalid_stat_tuple(self):
+        self.prepare_current_result()
+        missing = self.root / "events/cam2-events.jsonl"
+        missing.unlink()
+        with self.assertRaisesRegex(ReconcileError, "current_evidence_source_unavailable"):
+            self.plan(current_evidence=True)
+        missing.write_text("restored fixture\n")
+        result = json.loads(self.result_path.read_text())
+        result["rows"][0]["stat"][4] = True
+        self.result_path.write_text(json.dumps(result))
+        with self.assertRaisesRegex(ReconcileError, "result_stat_invalid"):
+            self.plan(current_evidence=True)
+
+    def test_historical_mode_remains_default_and_requires_historical_signatures(self):
+        result = result_document()
+        result["evidence_signatures"] = None
+        self.result_path.write_text(json.dumps(result), encoding="utf-8")
+        with self.assertRaisesRegex(ReconcileError, "result_evidence_invalid"):
+            self.plan()
+
+    def test_cli_default_is_plan_only_and_apply_requires_explicit_flag(self):
+        before = self.aggregate.read_bytes()
+        out = StringIO()
+        with redirect_stdout(out):
+            result = main(["--aggregate", str(self.aggregate), "--results-root", str(self.results),
+                           "--result-id", self.result_id, "--expected-root", ROOT,
+                           "--expected-aggregate-sha256", file_sha256(self.aggregate)])
+        self.assertEqual(result, 0)
+        self.assertEqual(json.loads(out.getvalue())["outcome"], "READY_TO_ADOPT")
+        self.assertEqual(self.aggregate.read_bytes(), before)
+        self.assertFalse(self.aggregate.with_name("latest.json.before-run-fixture").exists())
+        self.assertFalse(self.aggregate.with_name("latest.json.reconcile.lock").exists())
 
     def test_both_optional_recovery_signatures_may_be_absent(self):
         result = result_document()
@@ -241,6 +352,24 @@ class ReconcileRetentionAggregateTests(unittest.TestCase):
         with self.assertRaisesRegex(ReconcileError, "result_changed_since_review"):
             apply_reconciliation(self.aggregate, reconciled, expected, self.result_id, self.result_path,
                                  summary["result_sha256"])
+
+    def test_current_apply_requires_explicit_mode_and_keeps_result_and_backup(self):
+        self.prepare_current_result()
+        result_before = self.result_path.read_bytes()
+        aggregate_before = self.aggregate.read_bytes()
+        expected = file_sha256(self.aggregate)
+        out = StringIO()
+        with redirect_stdout(out):
+            code = main(["--aggregate", str(self.aggregate), "--results-root", str(self.results),
+                         "--result-id", self.result_id, "--expected-root", str(self.root),
+                         "--expected-aggregate-sha256", expected, "--current-evidence", "--apply"])
+        self.assertEqual(code, 0)
+        adopted = json.loads(self.aggregate.read_text())
+        self.assertEqual(adopted["status"], "VERIFIED_WITH_CURRENT_EVIDENCE")
+        backup = self.aggregate.with_name("latest.json.before-run-fixture")
+        self.assertEqual(backup.read_bytes(), aggregate_before)
+        self.assertTrue(self.aggregate.with_name("latest.json.reconcile.lock").exists())
+        self.assertEqual(self.result_path.read_bytes(), result_before)
 
 
 if __name__ == "__main__":

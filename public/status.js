@@ -23,12 +23,13 @@ async function refresh(){
       const item=data[key]||{};
       const el=document.getElementById(key);
       if(key==='maintenance'||key==='retention'){
-        el.textContent=key==='retention'?({pass:'Đã dọn xong',ok:'Đã dọn xong',warn:'Cần kiểm tra',fail:'Dọn chưa thành công',unknown:'Chưa có kết quả xác nhận'}[item.state]||'Chưa có kết quả xác nhận'):(labels[item.state]||'Chưa có kết quả xác nhận');
+        el.textContent=key==='retention'?(item.verification_status==='VERIFIED_WITH_CURRENT_EVIDENCE'?'Đã xác minh bằng bằng chứng hiện tại':item.verification_status==='HISTORICALLY_VERIFIED'?'Đã xác minh bằng bằng chứng lịch sử':({pass:'Đạt',ok:'Đạt',warn:'Cần kiểm tra',fail:'Không đạt',unknown:'Chưa có kết quả xác nhận'}[item.state]||'Chưa có kết quả xác nhận')):(labels[item.state]||'Chưa có kết quả xác nhận');
         const detail=document.getElementById(key+'-time');
         const measured=time(item.measured_at);
         const evidence=key==='retention'&&Number.isSafeInteger(item.file_count)&&item.file_count>=0&&Number.isSafeInteger(item.byte_count)&&item.byte_count>=0
           ?' · '+item.file_count.toLocaleString('vi-VN')+' tệp · '+(item.byte_count/1024**3).toFixed(1)+' GiB':'';
-        detail.textContent=measured?'Kết quả gần nhất · '+measured+evidence:'Chưa có thời điểm kết quả';
+        const evidenceTime=key==='retention'&&time(item.evidence_collected_at)?' · Bằng chứng hiện tại thu thập lúc '+time(item.evidence_collected_at):'';
+        detail.textContent=measured?'Kết quả gần nhất · '+measured+evidence+evidenceTime:'Chưa có thời điểm kết quả';
       }else {
         const label=stale?'Dữ liệu cũ · Chưa xác minh hiện tại':!snapshotTime?'Chưa xác minh':key==='nas'?({ok:'Đủ chỗ',pass:'Đủ chỗ',warn:'Sắp đầy',fail:'Cần kiểm tra dung lượng',unknown:'Chưa xác minh'}[item.state]||labels.unknown):(labels[item.state]||labels.unknown);
         const free=key==='nas'&&snapshotTime&&!stale?bytesGiB(data.health?.vol1?.available_bytes):null;
