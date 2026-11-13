@@ -158,6 +158,17 @@ class ReconcileRetentionAggregateTests(unittest.TestCase):
                 with self.assertRaisesRegex(ReconcileError, "result_file_count_mismatch"):
                     self.plan()
 
+    def test_every_stat_value_must_be_a_nonnegative_exact_int(self):
+        invalid_values = (True, False, -1, "1", 1.0)
+        for position in range(5):
+            for value in invalid_values:
+                with self.subTest(position=position, value=value):
+                    result = result_document()
+                    result["rows"][0]["stat"][position] = value
+                    self.result_path.write_text(json.dumps(result), encoding="utf-8")
+                    with self.assertRaisesRegex(ReconcileError, "result_stat_invalid"):
+                        self.plan()
+
     def test_mismatched_remote_size_or_hash_is_rejected(self):
         original = result_document()
         for field in ("size", "sha256"):

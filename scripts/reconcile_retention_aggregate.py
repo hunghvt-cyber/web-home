@@ -110,8 +110,11 @@ def _validate_archived_rows(report):
         require(isinstance(row, dict), "result_row_invalid")
         stat = row.get("stat")
         require(isinstance(stat, list) and len(stat) == 5, "result_stat_invalid")
+        require(
+            all(type(value) is int and value >= 0 for value in stat),
+            "result_stat_invalid",
+        )
         size = stat[2]
-        require(type(size) is int and size >= 0, "result_size_invalid")
         require(row.get("status") == "DELETED", "result_not_fully_applied")
         remote = row.get("remote")
         remote_hash = remote.get("sha256") if isinstance(remote, dict) else None
