@@ -19,7 +19,7 @@
     {
       "label": "Super Agent",
       "description": "Điều phối công việc AI · Cần kết nối Tailscale",
-      "url": "http://100.94.158.94:8765/"
+      "url": "https://fnos-f922x.tail507a31.ts.net/"
     }
   ],
   "base_url": "https://homepage-nas.vercel.app",
