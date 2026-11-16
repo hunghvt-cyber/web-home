@@ -18,18 +18,6 @@ if base:
 if OUT.exists():
     shutil.rmtree(OUT)
 shutil.copytree(ROOT / 'public', OUT)
-# Bundle terminal dependencies locally; no CDN script can access terminal input.
-(OUT / 'vendor').mkdir(exist_ok=True)
-for source, target in [
-    ('@xterm/xterm/lib/xterm.js', 'xterm.js'),
-    ('@xterm/xterm/css/xterm.css', 'xterm.css'),
-    ('@xterm/addon-fit/lib/addon-fit.js', 'addon-fit.js'),
-    ('@xterm/xterm/LICENSE', 'xterm-LICENSE'),
-    ('@xterm/addon-fit/LICENSE', 'addon-fit-LICENSE'),
-]:
-    shutil.copyfile(ROOT / 'node_modules' / source, OUT / 'vendor' / target)
-
-
 def page(title, body):
     body = body.replace('<script src="/account.js"', '<script src="/account.js?v='+account_version+'"')
     return '<!doctype html><html lang="vi"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+esc(title)+'</title><link rel="stylesheet" href="/style.css"><main>'+body+'<footer>'+esc(site['title'])+' · Hướng dẫn ngắn, dễ dùng.</footer></main></html>'
@@ -78,7 +66,7 @@ home_body = (
     + '<details id="database-status" class="account noprint access-panel"><summary><strong>☁ Supabase</strong><span id="database-state" role="status">Đang kiểm tra kết nối API…</span></summary><div class="access-panel-body"><p id="database-time" class="muted"></p><div class="account-actions"><button id="database-refresh" type="button">Kiểm tra lại</button> <a href="https://supabase.com/dashboard/project/sxnuwfnqgqjrjvoosjep" target="_blank" rel="noopener noreferrer">Mở Supabase để khởi động</a></div><p class="muted">Nếu dự án bị tạm dừng, đăng nhập Supabase và chọn Resume project. Không cần mở khóa Homepage. Kiểm tra API không xác nhận sức khỏe toàn bộ database.</p></div></details>'
     + '<script src="/database-status.js" defer></script><script src="/account.js" defer></script>'
     + cat_desk
-    + '<nav class="home-shortcuts" aria-label="Lối tắt"><a class="shortcut" href="/lich-tu-dong/"><strong>Lịch tự động</strong><small>GitHub Actions · NAS</small></a><a class="shortcut" href="/nas/terminal/"><strong>NAS Terminal</strong><small>3 phiên · mở terminal</small></a><a class="shortcut" href="/gemini/"><strong>Gemini</strong><small>Trợ lý AI · mở trang riêng</small></a>'
+    + '<nav class="home-shortcuts" aria-label="Lối tắt"><a class="shortcut" href="/lich-tu-dong/"><strong>Lịch tự động</strong><small>GitHub Actions · NAS</small></a><a class="shortcut" href="/gemini/"><strong>Gemini</strong><small>Trợ lý AI · mở trang riêng</small></a>'
     + ''.join(links)
     + '<a class="shortcut" href="/huong-dan/"><strong>Hướng dẫn đồ vật</strong><small>Hướng dẫn và QR</small></a><a class="shortcut" href="/notes/"><strong>Notes</strong><small>Ghi chú và thư mục</small></a><a class="shortcut" href="/don-file-trung/" target="_blank" rel="noopener noreferrer"><strong>Dọn file trùng ↗</strong><small>Google Drive · Koofr</small></a><a class="shortcut" href="/chi-tieu/"><strong>Chi tiêu</strong><small>Thống kê gia đình</small></a></nav>'
     + '<section><div class="bar"><h2>Camera & dung lượng NAS - Theo báo cáo gần nhất</h2></div><div class="body">'+rows+'<h3 class="maintenance-heading">Bảo trì hằng ngày</h3>'+maintenance+'<p id="updated" class="muted">Chưa kết nối nguồn trạng thái.</p><noscript>Trạng thái cần JavaScript; link và hướng dẫn vẫn dùng được.</noscript></div></section>'

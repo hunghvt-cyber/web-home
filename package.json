@@ -6,8 +6,6 @@
     "test": "node --test tests/*.test.js"
   },
   "dependencies": {
-    "@xterm/addon-fit": "0.10.0",
-    "@xterm/xterm": "5.5.0",
     "iron-session": "8.0.4"
   },
   "devDependencies": {

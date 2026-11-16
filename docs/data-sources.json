@@ -265,12 +265,12 @@
     },
     {
       "id": "nas-terminal",
-      "state": "production_enabled_runtime_verified_20261101",
+      "state": "retired_from_homepage_2026-11-16",
       "documentation": "docs/NAS-TERMINAL.md",
       "source_repository": "hunghvt-cyber/web-home",
-      "url": "https://homepage-nas.vercel.app/nas/terminal/",
+      "url": null,
       "transport": "outbound-wss-cloudflare-pty-tmux",
-      "api": "POST /api/auth?service=terminal",
+      "api": null,
       "nas_service": "homepage-terminal.service",
       "max_sessions": 3,
       "grant_seconds": 900,
@@ -294,7 +294,8 @@
         "NAS RAM/CPU not measured",
         "Phone/iPad authenticated UI not qualified in this evidence",
         "Ticket revocation bounded by 5-minute expiry"
-      ]
+      ],
+      "retirement_note": "Homepage UI, ticket endpoint and PTY page removed; NAS agent and Cloudflare Worker remain only because the duplicate scanner shares that agent/relay. NAS service was not changed."
     }
   ],
   "cross_cutting": {

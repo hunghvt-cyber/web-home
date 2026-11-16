@@ -1,10 +1,16 @@
-# NAS Terminal — vận hành hiện hành
+# NAS Terminal trên Homepage — đã ngừng 16/11/2026
 
-Cập nhật tài liệu 02/11/2026 (Asia/Ho_Chi_Minh). Bằng chứng runtime gần nhất trong hồ sơ này là ngày **01/11/2026**, không phải lần kiểm tra host mới.
+Chủ hệ thống chọn dùng ứng dụng terminal chuyên biệt thay cho terminal trên web. Commit `663cffa` vẫn giữ lối tắt trên homepage; thay đổi tiếp theo gỡ trang PTY, shortcut, API cấp ticket terminal và tài nguyên xterm khỏi Homepage.
+
+Trang web terminal đã nghỉ. Các cấu hình/khóa cũ không được dùng bởi Homepage sau release này; chưa xóa secret khỏi Vercel hoặc Worker. Không đụng NAS service hay cấu hình máy.
+
+**Phần còn dùng:** NAS agent và Cloudflare Worker vẫn được bộ quét file trùng dùng chung. Không dừng/xóa chúng như một phần của việc gỡ web terminal. Relay tiếp tục giới hạn theo audience `nas-duplicates` cho nghiệp vụ đó.
+
+Phần dưới là hồ sơ lịch sử khi terminal web còn hoạt động, cập nhật ban đầu ngày 02/11/2026. Bằng chứng runtime gần nhất của tính năng cũ là ngày **01/11/2026**, không phải trạng thái hiện tại.
 
 ## Trạng thái và nơi sử dụng
 
-**Đã triển khai và kích hoạt Production:** https://homepage-nas.vercel.app/nas/terminal/
+**Lịch sử:** terminal web từng được triển khai tại https://homepage-nas.vercel.app/nas/terminal/; endpoint đã được gỡ khỏi Homepage.
 
 Source: [web-home/main](https://github.com/hunghvt-cyber/web-home). Giao diện, API, agent và relay cùng repo, chạy độc lập ở Vercel/NAS/Cloudflare. Không cần bật Tailscale hay mở cổng router.
 

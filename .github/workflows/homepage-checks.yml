@@ -27,8 +27,8 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y tmux
       - run: python -m unittest discover -s tests -p 'test_terminal_*.py'
       - run: python -m unittest discover -s tests -p 'test_duplicates*.py'
-      - run: bash -n nas-agent/install.sh && node --check terminal-relay/worker.js && node --check public/nas-terminal.js
+      - run: bash -n nas-agent/install.sh && node --check terminal-relay/worker.js
       - run: node --check public/guides.js && node --check api/notes.js && node --check lib/validation.js
       - run: test ! -f dist/notes/index.html && test -f dist/gemini/index.html
-      - run: grep -q 'home-gemini' dist/index.html
+      - run: grep -q 'href="/gemini/"' dist/index.html && ! grep -q 'nas/terminal' dist/index.html
 
