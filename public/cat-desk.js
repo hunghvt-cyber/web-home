@@ -51,13 +51,4 @@
   motion(!!reduced?.matches);
   reduced?.addEventListener('change',event=>motion(event.matches));
   toggle.addEventListener('click',()=>motion(!desk.classList.contains('motion-paused')));
-  function mirror(){
-    const drive=document.getElementById('backup-state')?.textContent;
-    const photos=document.getElementById('backfill-state')?.textContent;
-    put('cat-drive','Drive · '+drive+' · '+(document.getElementById('backup-time')?.textContent||'chưa rõ thời gian'));
-    put('cat-photos','Photos · '+photos+' · '+(document.getElementById('backfill-snapshot')?.textContent||'chưa có số liệu chốt'));
-  }
-  const observer=new MutationObserver(mirror);
-  for(const id of ['backup-state','backup-time','backfill-state','backfill-snapshot']){const node=document.getElementById(id);if(node)observer.observe(node,{childList:true,subtree:true,characterData:true});}
-  mirror();
 })();

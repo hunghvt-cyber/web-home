@@ -7,24 +7,22 @@
         <summary><span><span class="cat-eyebrow">HỒ SƠ NHÂN SỰ</span><strong>Chiken IT Support</strong></span><span class="cat-profile-toggle" aria-hidden="true"></span></summary>
         <div class="cat-profile-body">
           <p class="cat-profile-intro">Ham chơi, lười làm. Được cái rất tự tin khi có ChatGPT Pro đứng sau.</p>
-          <dl><div><dt>Tuổi</dt><dd>Quý Dậu · tuổi con gà 🐔</dd></div><div><dt>Lương</dt><dd>5 triệu / tháng</dd></div><div><dt>Tiền đã kiếm được</dt><dd><strong id="donate-earned">Đang tải…</strong><br><small>Tổng các khoản trong sổ donate đang hiển thị.</small></dd></div><div><dt>Chuyên môn</dt><dd>Hỏi ChatGPT Pro, rồi gật gù như tự nghĩ ra.</dd></div><div><dt>Quy trình</dt><dd>Tắt đi bật lại. Chưa được thì hỏi AI tiếp.</dd></div></dl>
+          <dl><div><dt>Tuổi</dt><dd>Quý Dậu · tuổi con gà 🐔</dd></div><div><dt>Lương</dt><dd>5 triệu / tháng</dd></div><div><dt>Chuyên môn</dt><dd>Hỏi ChatGPT Pro, rồi gật gù như tự nghĩ ra.</dd></div><div><dt>Quy trình</dt><dd>Tắt đi bật lại. Chưa được thì hỏi AI tiếp.</dd></div></dl>
           <p class="cat-profile-quote">“Đại ca cứ bình tĩnh, em đang soạn prompt.”</p>
         </div>
       </details>
     </div>
     <div class="cat-console">
-      <div class="donate-qr-card" aria-label="Quét QR donate MB">
-        <button class="donate-qr-code" type="button" data-donate-zoom aria-label="Phóng to QR nhận donate MB"><img src="/images/donate-mb-566766.svg" width="220" height="220" alt="QR donate MB, tài khoản 566766"></button>
-        <div class="donate-qr-info"><span class="cat-eyebrow">QUÉT LÀ CÓ PATE</span><strong>MB Bank</strong><span class="donate-account">566766</span><small>HOANG VU THANH HUNG</small><button class="donate-zoom-button" type="button" data-donate-zoom>⤢ Phóng to QR</button><small>Lời nhắn tùy ý, hiển thị công khai.</small></div>
+      <div class="donate-qr-card" aria-label="Tạo QR chuyển khoản MB">
+        <img id="donate-qr-image" class="donate-qr-image" src="/images/donate-mb-566766.svg" width="220" height="220" alt="QR chuyển khoản MB">
+        <div class="donate-qr-info"><span class="cat-eyebrow">QUÉT ĐỂ CHUYỂN KHOẢN</span><strong>MB Bank</strong><span class="donate-account">566766</span><small>HOANG VU THANH HUNG</small><label for="donate-message-input">Lời nhắn chuyển khoản</label><input id="donate-message-input" type="text" maxlength="50" placeholder="Ví dụ: Mua pate cho Chiken"><label for="donate-amount-input">Số tiền (tùy chọn)</label><input id="donate-amount-input" type="number" min="1000" max="999999999" step="1000" placeholder="Để trống nếu tự nhập trong app ngân hàng"><p class="donate-qr-hint">QR sẽ cập nhật theo lời nhắn và số tiền bạn nhập.</p></div>
       </div>
-    <div class="cat-terminal" aria-label="Màn hình donate"><div class="cat-terminal-top" aria-hidden="true"><i></i><i></i><i></i><span>mèo@donate:~</span></div><div class="cat-terminal-content"><p class="donate-eyebrow">QUỸ PATE CỦA MÈO</p><p id="donate-amount">Chờ ting ting…</p><p id="donate-message">Ai cho ăn thì mèo cảm ơn. Ai chưa cho ăn, mèo vẫn nhìn.</p><p id="donate-thanks">Chuyển khoản MB · lời nhắn tùy đại ca.</p><span class="cat-cursor" aria-hidden="true">▌</span></div><p id="donate-connection" class="donate-connection" role="status">Đang kết nối sổ donate…</p><button id="donate-sound" type="button" aria-pressed="false">Bật tiếng ting ting</button></div>
+    <div class="cat-terminal" aria-label="Màn hình giả terminal"><div class="cat-terminal-top" aria-hidden="true"><i></i><i></i><i></i><span>mèo@homepage:~</span></div><div class="cat-terminal-content"><p class="donate-eyebrow">CHIKEN IT SUPPORT</p><p>Đang trực NAS…</p><p>Trạng thái: <span id="cat-screen-title">chờ báo cáo</span></p><p id="cat-says">Đại ca cứ bình tĩnh, em đang mở sổ trực.</p><span class="cat-cursor" aria-hidden="true">▌</span></div></div>
     </div>
   </div>
   <div class="cat-caption"><span class="cat-indicator" aria-hidden="true"></span><strong id="cat-state" role="status">Đang chờ báo cáo</strong><time id="cat-clock" aria-label="Giờ Việt Nam"></time><button id="cat-motion" type="button" aria-pressed="false">Dừng chuyển động</button></div>
-  <div class="cat-footer"><div class="cat-nas-outside" aria-label="NAS theo báo cáo gần nhất"><strong id="cat-screen-title">Đang nhận báo cáo NAS…</strong><span id="cat-screen-cameras">Camera · chưa rõ</span><span id="cat-screen-storage">Ổ đĩa · chưa rõ</span></div><p id="cat-says">Đại ca chờ chút, em đang mở sổ trực.</p><small id="cat-report-time">Trạng thái theo báo cáo gần nhất, không phải giám sát trực tiếp.</small><details><summary>Sổ backup gần nhất</summary><p id="cat-drive">Drive · đang tải báo cáo…</p><p id="cat-photos">Photos · đang tải tiến độ…</p></details></div>
+  <div class="cat-footer"><div class="cat-nas-outside" aria-label="NAS theo báo cáo gần nhất"><strong>Báo cáo NAS</strong><span id="cat-screen-cameras">Camera · chưa rõ</span><span id="cat-screen-storage">Ổ đĩa · chưa rõ</span></div><small id="cat-report-time">Trạng thái theo báo cáo gần nhất, không phải giám sát trực tiếp.</small></div>
   <noscript><p class="cat-nojs">Bật JavaScript để xem báo cáo. Các lối tắt bên dưới vẫn dùng được.</p></noscript>
-  <div class="donate-history"><h3>Sổ pate gần nhất</h3><p class="donate-history-note">24 giờ gần nhất · luôn giữ ít nhất 10 khoản mới nhất nếu đã có đủ.</p><p id="donate-history-state">Đang tải sổ donate…</p><ol id="donate-history"></ol><button id="donate-more" type="button" hidden>Xem thêm</button></div>
-  <dialog id="donate-dialog" aria-labelledby="donate-dialog-title"><div class="donate-dialog-header"><h2 id="donate-dialog-title">Cho mèo ăn 🐟</h2><button id="donate-close" type="button" aria-label="Đóng mã QR">Đóng</button></div><p>MB Bank · <strong>566766</strong><br>HOANG VU THANH HUNG</p><img src="/images/donate-mb-566766.svg" width="320" height="320" loading="lazy" alt="QR nhận donate MB Bank, tài khoản 566766, HOANG VU THANH HUNG"><p>Nội dung chuyển khoản tùy ý; lời nhắn sẽ hiện công khai trên Homepage.</p><button id="donate-copy" type="button">Sao chép số tài khoản</button><p id="donate-copy-state" role="status"></p></dialog>
 </section>
-<script src="/donations.js" defer></script>
+<script src="/donate-qr.js" defer></script>
 <script src="/cat-desk.js" defer></script>
