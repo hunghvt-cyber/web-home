@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {existsSync} from 'node:fs';
+import {existsSync, readFileSync} from 'node:fs';
 import {createAuthHandler} from '../api/auth.js';
 
 test('web terminal page is removed and its former API returns 410',async()=>{
