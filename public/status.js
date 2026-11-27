@@ -2,7 +2,8 @@ const labels={ok:'Hoạt động',pass:'Đạt',warn:'Cần kiểm tra',fail:'C�
 const time=value=>{if(!value)return null;const d=new Date(value);return Number.isFinite(d.getTime())?d.toLocaleString('vi-VN',{timeZone:'Asia/Ho_Chi_Minh'}):null};
 const bytesGiB=value=>typeof value==='number'&&Number.isSafeInteger(value)&&value>=0?(value/1024**3).toFixed(1)+' GiB':null;
 const percent=value=>typeof value==='number'&&Number.isFinite(value)&&value>=0&&value<=100?value.toFixed(1)+'%':null;
-const display=(id,value,stale,hasTimestamp)=>{document.getElementById(id).textContent=stale?'Dữ liệu cũ':(hasTimestamp?(value||'Chưa có dữ liệu'):'Chưa có dữ liệu')};
+const put=(id,value)=>{const el=document.getElementById(id);if(el)el.textContent=value};
+const display=(id,value,stale,hasTimestamp)=>put(id,stale?'Dữ liệu cũ':(hasTimestamp?(value||'Chưa có dữ liệu'):'Chưa có dữ liệu'));
 async function refresh(){
   const stamp=document.getElementById('updated');
   try{
@@ -22,6 +23,7 @@ async function refresh(){
     for(const key of ['cam1','cam2','nas','maintenance','retention']){
       const item=data[key]||{};
       const el=document.getElementById(key);
+      if(!el)continue;
       if(key==='maintenance'||key==='retention'){
         el.textContent=key==='retention'?(item.verification_status==='VERIFIED_WITH_CURRENT_EVIDENCE'?'Đã xác minh bằng bằng chứng hiện tại':item.verification_status==='HISTORICALLY_VERIFIED'?'Đã xác minh bằng bằng chứng lịch sử':({pass:'Đạt',ok:'Đạt',warn:'Cần kiểm tra',fail:'Không đạt',unknown:'Chưa có kết quả xác nhận'}[item.state]||'Chưa có kết quả xác nhận')):(labels[item.state]||'Chưa có kết quả xác nhận');
         const detail=document.getElementById(key+'-time');
@@ -36,11 +38,11 @@ async function refresh(){
         el.textContent=label+(free?' · Còn trống '+free:'');
       }
     }
-    stamp.textContent=snapshotTime?'Đo lúc: '+snapshotTime+(receivedTime?' · Nhận lúc: '+receivedTime:'')+(stale?' · Dữ liệu cũ hoặc chưa xác minh.':'')+(data._report?.recovered_previous?' · Đang dùng bản báo cáo trước.':''):'Chưa có thời gian báo cáo';
+    if(stamp)stamp.textContent=snapshotTime?'Đo lúc: '+snapshotTime+(receivedTime?' · Nhận lúc: '+receivedTime:'')+(stale?' · Dữ liệu cũ hoặc chưa xác minh.':'')+(data._report?.recovered_previous?' · Đang dùng bản báo cáo trước.':''):'Chưa có thời gian báo cáo';
     window.dispatchEvent(new CustomEvent('portal:nas-status',{detail:{data,stale,snapshotTime,receivedTime}}));
     const health=data.health||{};
     const healthStamp=document.getElementById('health-updated');
-    healthStamp.textContent=snapshotTime?'Theo báo cáo gần nhất · '+snapshotTime+(stale?' · Dữ liệu cũ':''):'Chưa có dữ liệu';
+    if(healthStamp)healthStamp.textContent=snapshotTime?'Theo báo cáo gần nhất · '+snapshotTime+(stale?' · Dữ liệu cũ':''):'Chưa có dữ liệu';
     const root=health.root||{},vol1=health.vol1||{},ram=health.ram||{},swap=health.swap||{};
     display('health-root-used',percent(root.used_percent),stale,!!snapshotTime);
     display('health-root-free',bytesGiB(root.available_bytes),stale,!!snapshotTime);
@@ -54,12 +56,13 @@ async function refresh(){
     display('health-swap-percent',swapPercent,stale,!!snapshotTime);
   }catch{
     window.dispatchEvent(new CustomEvent('portal:nas-status',{detail:{error:true}}));
-    stamp.textContent='Không tải được báo cáo mới. Camera/NAS hiện chưa được xác minh.';
-    for(const key of ['cam1','cam2','nas'])document.getElementById(key).textContent='Chưa xác minh';
-    document.getElementById('health-updated').textContent='Chưa tải được báo cáo mới';
-    for(const id of ['health-root-used','health-root-free','health-vol1-used','health-vol1-free','health-ram','health-swap-usage','health-swap-percent'])document.getElementById(id).textContent='Chưa có dữ liệu mới';
+    if(stamp)stamp.textContent='Không tải được báo cáo mới. Camera/NAS hiện chưa được xác minh.';
+    for(const key of ['cam1','cam2','nas'])put(key,'Chưa xác minh');
+    put('health-updated','Chưa tải được báo cáo mới');
+    for(const id of ['health-root-used','health-root-free','health-vol1-used','health-vol1-free','health-ram','health-swap-usage','health-swap-percent'])put(id,'Chưa có dữ liệu mới');
   }
 }
+document.getElementById('nas-report-refresh')?.addEventListener('click',refresh);
 refresh();
 setInterval(refresh,300000);
 
